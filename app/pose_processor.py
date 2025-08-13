@@ -104,7 +104,9 @@ class PoseProcessor:
             if frame is None:
                 return ProcessingResult(
                     success=False,
-                    error="Input frame is None"
+                    error="Input frame is None",
+                    keypoints=Keypoints(),
+                    frame_info=FrameInfo(width=0, height=0, has_pose=False, has_face=False, has_left_hand=False, has_right_hand=False)
                 )
             
             # Convert BGR to RGB (MediaPipe expects RGB)
@@ -129,7 +131,9 @@ class PoseProcessor:
             logger.error(f"Error processing frame: {e}")
             return ProcessingResult(
                 success=False,
-                error=str(e)
+                error=str(e),
+                keypoints=Keypoints(),
+                frame_info=FrameInfo(width=0, height=0, has_pose=False, has_face=False, has_left_hand=False, has_right_hand=False)
             )
     
     def decode_base64_frame(self, frame_data: str) -> Optional[np.ndarray]:
