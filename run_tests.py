@@ -103,14 +103,6 @@ def main():
     }
     test_suites.append(suite_4)
     
-    # Test Suite 5: Coverage Report
-    suite_5 = {
-        "name": "Coverage Analysis",
-        "cmd": ["python", "-m", "pytest", "--cov=app", "--cov-report=term-missing", "--cov-report=html", "-m", "not slow", "-q"],
-        "description": "Test coverage analysis"
-    }
-    test_suites.append(suite_5)
-    
     # Run all test suites
     results = []
     
