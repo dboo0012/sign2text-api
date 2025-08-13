@@ -12,7 +12,6 @@ from unittest.mock import Mock, AsyncMock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.pose_processor import PoseProcessor
-from app.connection_manager import ConnectionManager
 from app.websocket_handler import WebSocketHandler
 
 
@@ -42,15 +41,9 @@ def mock_websocket():
 
 
 @pytest.fixture
-def connection_manager():
-    """Create a fresh ConnectionManager for each test"""
-    return ConnectionManager()
-
-
-@pytest.fixture
-def websocket_handler(connection_manager):
-    """Create a WebSocketHandler with a fresh ConnectionManager"""
-    return WebSocketHandler(connection_manager)
+def websocket_handler():
+    """Create a WebSocketHandler for testing"""
+    return WebSocketHandler()
 
 
 @pytest.fixture

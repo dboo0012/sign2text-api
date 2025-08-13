@@ -1,143 +1,28 @@
 """
-Pytest-based tests for WebSocket functionality
+Pytest-based tests for simplified WebSocket functionality
 """
 import sys
 import os
 import pytest
 import asyncio
 import json
-from unittest.mock import Mock, AsyncMock
+import time
+from unittest.mock import Mock, AsyncMock, patch
 
 # Add parent directory to path so we can import the app module
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.connection_manager import ConnectionManager
 from app.websocket_handler import WebSocketHandler
 from app.pose_processor import PoseProcessor
 
 
-class TestConnectionManager:
-    """Test ConnectionManager functionality"""
-    
-    @pytest.fixture
-    def manager(self):
-        """Create a ConnectionManager instance for testing"""
-        return ConnectionManager()
-    
-    @pytest.fixture
-    def mock_websocket(self):
-        """Create a mock WebSocket for testing"""
-        websocket = Mock()
-        websocket.accept = AsyncMock()
-        websocket.send_text = AsyncMock()
-        websocket.receive_text = AsyncMock()
-        return websocket
-    
-    def test_manager_initialization(self, manager):
-        """Test ConnectionManager initialization"""
-        assert manager.active_connections == [], "Should start with no connections"
-        assert manager.processors == {}, "Should start with no processors"
-        assert manager.connection_info == {}, "Should start with no connection info"
-    
-    @pytest.mark.asyncio
-    async def test_connect_websocket(self, manager, mock_websocket):
-        """Test connecting a WebSocket"""
-        result = await manager.connect(mock_websocket)
-        
-        assert result is True, "Connection should succeed"
-        assert mock_websocket in manager.active_connections, "WebSocket should be in active connections"
-        assert mock_websocket in manager.processors, "WebSocket should have associated processor"
-        assert mock_websocket in manager.connection_info, "WebSocket should have connection info"
-        mock_websocket.accept.assert_called_once()
-    
-    @pytest.mark.asyncio
-    async def test_disconnect_websocket(self, manager, mock_websocket):
-        """Test disconnecting a WebSocket"""
-        # First connect
-        await manager.connect(mock_websocket)
-        assert mock_websocket in manager.active_connections
-        
-        # Then disconnect
-        manager.disconnect(mock_websocket)
-        
-        assert mock_websocket not in manager.active_connections, "WebSocket should be removed from active connections"
-        assert mock_websocket not in manager.processors, "Processor should be cleaned up"
-        assert mock_websocket not in manager.connection_info, "Connection info should be cleaned up"
-    
-    def test_get_processor(self, manager, mock_websocket):
-        """Test getting processor for a connection"""
-        # Before connection
-        processor = manager.get_processor(mock_websocket)
-        assert processor is None, "Should return None for non-existent connection"
-    
-    @pytest.mark.asyncio
-    async def test_get_processor_after_connect(self, manager, mock_websocket):
-        """Test getting processor after connection"""
-        await manager.connect(mock_websocket)
-        
-        processor = manager.get_processor(mock_websocket)
-        assert processor is not None, "Should return processor for connected WebSocket"
-        assert isinstance(processor, PoseProcessor), "Should return PoseProcessor instance"
-    
-    @pytest.mark.asyncio
-    async def test_update_activity(self, manager, mock_websocket):
-        """Test updating connection activity"""
-        import time
-        
-        await manager.connect(mock_websocket)
-        
-        initial_info = manager.get_connection_info(mock_websocket)
-        initial_messages = initial_info['messages_processed']
-        
-        # Add small delay to ensure timestamp difference
-        time.sleep(0.001)
-        manager.update_activity(mock_websocket)
-        
-        updated_info = manager.get_connection_info(mock_websocket)
-        assert updated_info['messages_processed'] == initial_messages + 1, "Message count should increment"
-        assert updated_info['last_activity'] >= initial_info['last_activity'], "Last activity should be updated or same"
-    
-    @pytest.mark.asyncio
-    async def test_connection_stats(self, manager, mock_websocket):
-        """Test getting connection statistics"""
-        # Empty stats
-        stats = manager.get_connection_stats()
-        assert stats['total_connections'] == 0, "Should start with 0 connections"
-        assert stats['total_messages_processed'] == 0, "Should start with 0 messages"
-        
-        # After connection
-        await manager.connect(mock_websocket)
-        manager.update_activity(mock_websocket)
-        
-        stats = manager.get_connection_stats()
-        assert stats['total_connections'] == 1, "Should have 1 connection"
-        assert stats['total_messages_processed'] == 1, "Should have 1 message processed"
-        assert stats['active_processors'] == 1, "Should have 1 active processor"
-    
-    @pytest.mark.asyncio
-    async def test_is_connected(self, manager, mock_websocket):
-        """Test checking if WebSocket is connected"""
-        assert not manager.is_connected(mock_websocket), "Should not be connected initially"
-        
-        await manager.connect(mock_websocket)
-        assert manager.is_connected(mock_websocket), "Should be connected after connect"
-        
-        manager.disconnect(mock_websocket)
-        assert not manager.is_connected(mock_websocket), "Should not be connected after disconnect"
-
-
 class TestWebSocketHandler:
-    """Test WebSocketHandler functionality"""
+    """Test simplified WebSocketHandler functionality"""
     
     @pytest.fixture
-    def manager(self):
-        """Create a ConnectionManager instance for testing"""
-        return ConnectionManager()
-    
-    @pytest.fixture
-    def handler(self, manager):
+    def handler(self):
         """Create a WebSocketHandler instance for testing"""
-        return WebSocketHandler(manager)
+        return WebSocketHandler()
     
     @pytest.fixture
     def mock_websocket(self):
@@ -146,144 +31,298 @@ class TestWebSocketHandler:
         websocket.accept = AsyncMock()
         websocket.send_text = AsyncMock()
         websocket.receive_text = AsyncMock()
+        websocket.close = AsyncMock()
         return websocket
     
     @pytest.fixture
-    def mock_processor(self):
-        """Create a mock PoseProcessor for testing"""
-        processor = Mock()
-        processor.decode_base64_frame = Mock(return_value=None)
-        processor.process_frame = Mock()
-        return processor
+    def mock_processor_result(self):
+        """Create a mock processor result"""
+        result = Mock()
+        result.model_dump = Mock(return_value={
+            "keypoints": [],
+            "confidence": 0.95,
+            "timestamp": time.time()
+        })
+        return result
     
-    def test_handler_initialization(self, handler, manager):
+    def test_handler_initialization(self, handler):
         """Test WebSocketHandler initialization"""
-        assert handler.connection_manager is manager, "Handler should reference the connection manager"
+        assert handler.current_websocket is None, "Should start with no connection"
+        assert handler.processor is None, "Should start with no processor"
+        assert handler.connected_at is None, "Should start with no connection time"
+        assert handler.messages_processed == 0, "Should start with 0 messages processed"
+    
+    def test_is_connected_false_initially(self, handler):
+        """Test is_connected returns False initially"""
+        assert not handler.is_connected(), "Should not be connected initially"
+    
+    def test_get_connection_stats_empty(self, handler):
+        """Test getting connection stats when no connection"""
+        stats = handler.get_connection_stats()
+        
+        assert stats['connected'] is False, "Should show not connected"
+        assert stats['connected_at'] is None, "Should have no connection time"
+        assert stats['messages_processed'] == 0, "Should have 0 messages processed"
+        assert stats['uptime_seconds'] == 0, "Should have 0 uptime"
     
     @pytest.mark.asyncio
-    async def test_handle_ping_message(self, handler, mock_websocket):
+    async def test_handle_ping_message(self, handler):
         """Test handling ping message"""
+        handler.current_websocket = Mock()
+        handler.current_websocket.send_text = AsyncMock()
+        
         timestamp = 1234567890.0
         ping_message = {
             "type": "ping",
             "timestamp": timestamp
         }
         
-        await handler._handle_ping(mock_websocket, ping_message)
+        await handler._handle_ping(ping_message)
         
         # Verify pong response was sent
-        mock_websocket.send_text.assert_called_once()
-        call_args = mock_websocket.send_text.call_args[0][0]
+        handler.current_websocket.send_text.assert_called_once()
+        call_args = handler.current_websocket.send_text.call_args[0][0]
         response = json.loads(call_args)
         
         assert response["type"] == "pong", "Should respond with pong"
         assert response["timestamp"] == timestamp, "Should echo timestamp"
     
     @pytest.mark.asyncio
-    async def test_handle_frame_message_no_data(self, handler, mock_websocket):
+    async def test_handle_frame_message_no_data(self, handler):
         """Test handling frame message without frame data"""
+        handler.current_websocket = Mock()
+        handler.current_websocket.send_text = AsyncMock()
+        
         frame_message = {
             "type": "frame",
             "timestamp": 1234567890.0
             # Missing 'frame' field
         }
         
-        await handler._handle_frame(mock_websocket, frame_message, Mock())
+        await handler._handle_frame(frame_message)
         
         # Should send error response
-        mock_websocket.send_text.assert_called_once()
-        call_args = mock_websocket.send_text.call_args[0][0]
+        handler.current_websocket.send_text.assert_called_once()
+        call_args = handler.current_websocket.send_text.call_args[0][0]
         response = json.loads(call_args)
         
         assert response["type"] == "error", "Should respond with error"
         assert "No frame data provided" in response["message"], "Should indicate missing frame data"
     
     @pytest.mark.asyncio
-    async def test_handle_frame_message_decode_failure(self, handler, mock_websocket, mock_processor):
+    async def test_handle_frame_message_no_processor(self, handler):
+        """Test handling frame message when processor is not initialized"""
+        handler.current_websocket = Mock()
+        handler.current_websocket.send_text = AsyncMock()
+        handler.processor = None  # No processor
+        
+        frame_message = {
+            "type": "frame",
+            "frame": "test_data",
+            "timestamp": 1234567890.0
+        }
+        
+        await handler._handle_frame(frame_message)
+        
+        # Should send error response
+        handler.current_websocket.send_text.assert_called_once()
+        call_args = handler.current_websocket.send_text.call_args[0][0]
+        response = json.loads(call_args)
+        
+        assert response["type"] == "error", "Should respond with error"
+        assert "Pose processor not initialized" in response["message"], "Should indicate processor error"
+    
+    @pytest.mark.asyncio
+    async def test_handle_frame_message_decode_failure(self, handler, mock_processor_result):
         """Test handling frame message when decoding fails"""
+        handler.current_websocket = Mock()
+        handler.current_websocket.send_text = AsyncMock()
+        
+        # Mock processor
+        handler.processor = Mock()
+        handler.processor.decode_base64_frame = Mock(return_value=None)  # Decode failure
+        
         frame_message = {
             "type": "frame",
             "frame": "invalid_base64_data",
             "timestamp": 1234567890.0
         }
         
-        # Mock processor to return None (decode failure)
-        mock_processor.decode_base64_frame.return_value = None
-        
-        await handler._handle_frame(mock_websocket, frame_message, mock_processor)
+        await handler._handle_frame(frame_message)
         
         # Should send error response
-        mock_websocket.send_text.assert_called_once()
-        call_args = mock_websocket.send_text.call_args[0][0]
+        handler.current_websocket.send_text.assert_called_once()
+        call_args = handler.current_websocket.send_text.call_args[0][0]
         response = json.loads(call_args)
         
         assert response["type"] == "error", "Should respond with error"
         assert "Failed to decode image" in response["message"], "Should indicate decode failure"
     
     @pytest.mark.asyncio
-    async def test_send_error(self, handler, mock_websocket):
+    async def test_handle_frame_message_success(self, handler, mock_processor_result):
+        """Test successful frame processing"""
+        handler.current_websocket = Mock()
+        handler.current_websocket.send_text = AsyncMock()
+        
+        # Mock processor
+        handler.processor = Mock()
+        mock_frame = Mock()
+        handler.processor.decode_base64_frame = Mock(return_value=mock_frame)
+        handler.processor.process_frame = Mock(return_value=mock_processor_result)
+        
+        timestamp = 1234567890.0
+        frame_message = {
+            "type": "frame",
+            "frame": "valid_base64_data",
+            "timestamp": timestamp
+        }
+        
+        await handler._handle_frame(frame_message)
+        
+        # Verify frame processing was called
+        handler.processor.decode_base64_frame.assert_called_once_with("valid_base64_data")
+        handler.processor.process_frame.assert_called_once_with(mock_frame)
+        
+        # Verify response was sent
+        handler.current_websocket.send_text.assert_called_once()
+        call_args = handler.current_websocket.send_text.call_args[0][0]
+        response = json.loads(call_args)
+        
+        assert response["type"] == "keypoints", "Should respond with keypoints"
+        assert response["timestamp"] == timestamp, "Should echo timestamp"
+        assert "data" in response, "Should include processed data"
+    
+    @pytest.mark.asyncio
+    async def test_send_error(self, handler):
         """Test sending error message"""
+        handler.current_websocket = Mock()
+        handler.current_websocket.send_text = AsyncMock()
+        
         error_message = "Test error message"
         
-        await handler._send_error(mock_websocket, error_message)
+        await handler._send_error(error_message)
         
-        mock_websocket.send_text.assert_called_once()
-        call_args = mock_websocket.send_text.call_args[0][0]
+        handler.current_websocket.send_text.assert_called_once()
+        call_args = handler.current_websocket.send_text.call_args[0][0]
         response = json.loads(call_args)
         
         assert response["type"] == "error", "Should be error type"
         assert response["message"] == error_message, "Should contain error message"
     
     @pytest.mark.asyncio
-    async def test_process_invalid_json(self, handler, mock_websocket, mock_processor):
+    async def test_send_response_no_connection(self, handler):
+        """Test sending response when no connection is active"""
+        handler.current_websocket = None
+        
+        # Should not raise an error
+        await handler._send_response({"type": "test"})
+    
+    @pytest.mark.asyncio
+    async def test_process_invalid_json(self, handler):
         """Test processing invalid JSON message"""
+        handler.current_websocket = Mock()
+        handler.current_websocket.send_text = AsyncMock()
+        handler.messages_processed = 0
+        
         invalid_json = "{ invalid json }"
         
-        await handler._process_message(mock_websocket, invalid_json, mock_processor)
+        await handler._process_message(invalid_json)
         
         # Should send error response
-        mock_websocket.send_text.assert_called_once()
-        call_args = mock_websocket.send_text.call_args[0][0]
+        handler.current_websocket.send_text.assert_called_once()
+        call_args = handler.current_websocket.send_text.call_args[0][0]
         response = json.loads(call_args)
         
         assert response["type"] == "error", "Should respond with error"
         assert "Invalid JSON format" in response["message"], "Should indicate JSON error"
+        assert handler.messages_processed == 1, "Should increment message counter even on error"
     
     @pytest.mark.asyncio
-    async def test_process_unknown_message_type(self, handler, mock_websocket, mock_processor, manager):
+    async def test_process_unknown_message_type(self, handler):
         """Test processing unknown message type"""
+        handler.current_websocket = Mock()
+        handler.current_websocket.send_text = AsyncMock()
+        handler.messages_processed = 0
+        
         unknown_message = json.dumps({
             "type": "unknown_type",
             "data": "some data"
         })
         
-        # Mock manager methods
-        manager.update_activity = Mock()
-        manager.is_connected = Mock(return_value=True)
-        
-        await handler._process_message(mock_websocket, unknown_message, mock_processor)
+        await handler._process_message(unknown_message)
         
         # Should send error response
-        mock_websocket.send_text.assert_called_once()
-        call_args = mock_websocket.send_text.call_args[0][0]
+        handler.current_websocket.send_text.assert_called_once()
+        call_args = handler.current_websocket.send_text.call_args[0][0]
         response = json.loads(call_args)
         
         assert response["type"] == "error", "Should respond with error"
         assert "Unknown message type" in response["message"], "Should indicate unknown type"
+        assert handler.messages_processed == 1, "Should increment message counter"
+    
+    @pytest.mark.asyncio
+    async def test_reject_second_connection(self, handler, mock_websocket):
+        """Test that second connection is rejected"""
+        # Set up a connection manually to simulate an active connection
+        handler.current_websocket = Mock()
+        handler.processor = Mock()
+        handler.connected_at = time.time()
+        
+        second_websocket = Mock()
+        second_websocket.close = AsyncMock()
+        
+        # Try second connection - should be rejected
+        await handler.handle_connection(second_websocket)
+        
+        # Second connection should be rejected
+        second_websocket.close.assert_called_once_with(
+            code=1008, 
+            reason="Only one connection allowed at a time"
+        )
+    
+    def test_cleanup_connection(self, handler):
+        """Test connection cleanup"""
+        # Set up a mock connection
+        handler.current_websocket = Mock()
+        handler.processor = Mock()
+        handler.connected_at = time.time()
+        handler.messages_processed = 5
+        
+        # Cleanup
+        handler._cleanup_connection()
+        
+        # Verify cleanup
+        assert handler.current_websocket is None, "Should clear websocket"
+        assert handler.processor is None, "Should clear processor"
+        assert handler.connected_at is None, "Should clear connection time"
+        assert handler.messages_processed == 0, "Should reset message counter"
+    
+    @pytest.mark.asyncio
+    async def test_get_connection_stats_with_connection(self, handler):
+        """Test getting connection stats with active connection"""
+        start_time = time.time()
+        handler.current_websocket = Mock()
+        handler.connected_at = start_time
+        handler.messages_processed = 10
+        
+        # Add small delay to test uptime
+        await asyncio.sleep(0.01)
+        
+        stats = handler.get_connection_stats()
+        
+        assert stats['connected'] is True, "Should show connected"
+        assert stats['connected_at'] == start_time, "Should show correct connection time"
+        assert stats['messages_processed'] == 10, "Should show correct message count"
+        assert stats['uptime_seconds'] > 0, "Should show positive uptime"
 
 
 class TestIntegration:
-    """Integration tests for WebSocket components"""
+    """Integration tests for simplified WebSocket components"""
     
     @pytest.fixture
-    def manager(self):
-        """Create a ConnectionManager instance for testing"""
-        return ConnectionManager()
-    
-    @pytest.fixture
-    def handler(self, manager):
+    def handler(self):
         """Create a WebSocketHandler instance for testing"""
-        return WebSocketHandler(manager)
+        return WebSocketHandler()
     
     @pytest.fixture
     def mock_websocket(self):
@@ -292,52 +331,65 @@ class TestIntegration:
         websocket.accept = AsyncMock()
         websocket.send_text = AsyncMock()
         websocket.receive_text = AsyncMock()
+        websocket.close = AsyncMock()
         return websocket
     
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_full_connection_lifecycle(self, manager, handler, mock_websocket):
-        """Test complete connection lifecycle"""
-        # Connect
-        await manager.connect(mock_websocket)
-        assert manager.is_connected(mock_websocket), "Should be connected"
+    async def test_full_message_processing_cycle(self, handler):
+        """Test complete message processing cycle"""
+        handler.current_websocket = Mock()
+        handler.current_websocket.send_text = AsyncMock()
         
-        # Process activity
-        manager.update_activity(mock_websocket)
-        info = manager.get_connection_info(mock_websocket)
-        assert info['messages_processed'] == 1, "Should have processed 1 message"
+        # Initialize processor
+        handler.processor = Mock()
+        handler.processor.decode_base64_frame = Mock(return_value=Mock())
         
-        # Disconnect
-        manager.disconnect(mock_websocket)
-        assert not manager.is_connected(mock_websocket), "Should be disconnected"
+        mock_result = Mock()
+        mock_result.model_dump = Mock(return_value={"test": "data"})
+        handler.processor.process_frame = Mock(return_value=mock_result)
+        
+        # Test ping
+        ping_data = json.dumps({"type": "ping", "timestamp": 12345})
+        await handler._process_message(ping_data)
+        
+        # Test frame
+        frame_data = json.dumps({
+            "type": "frame", 
+            "frame": "base64data", 
+            "timestamp": 67890
+        })
+        await handler._process_message(frame_data)
+        
+        # Verify both messages were processed
+        assert handler.messages_processed == 2, "Should have processed 2 messages"
+        assert handler.current_websocket.send_text.call_count == 2, "Should have sent 2 responses"
     
     @pytest.mark.asyncio
-    @pytest.mark.integration
-    async def test_multiple_connections(self, manager):
-        """Test handling multiple simultaneous connections"""
-        websockets = []
-        num_connections = 3
+    @pytest.mark.integration  
+    async def test_single_connection_enforcement(self, handler):
+        """Test that only one connection is allowed at a time"""
+        # This test verifies the core requirement of single connection
+        # Set up first connection manually 
+        handler.current_websocket = Mock()
+        handler.processor = Mock()
+        handler.connected_at = time.time()
+        handler.messages_processed = 0
         
-        # Create multiple mock websockets
-        for i in range(num_connections):
-            ws = Mock()
-            ws.accept = AsyncMock()
-            websockets.append(ws)
+        # Verify first connection is active
+        assert handler.is_connected(), "First connection should be active"
         
-        # Connect all
-        for ws in websockets:
-            await manager.connect(ws)
+        # Try to establish second connection
+        second_ws = Mock()
+        second_ws.close = AsyncMock()
         
-        # Verify all connected
-        stats = manager.get_connection_stats()
-        assert stats['total_connections'] == num_connections, f"Should have {num_connections} connections"
-        assert stats['active_processors'] == num_connections, f"Should have {num_connections} processors"
+        await handler.handle_connection(second_ws)
         
-        # Disconnect all
-        for ws in websockets:
-            manager.disconnect(ws)
+        # Second connection should be rejected
+        second_ws.close.assert_called_once_with(
+            code=1008, 
+            reason="Only one connection allowed at a time"
+        )
         
-        # Verify all disconnected
-        stats = manager.get_connection_stats()
-        assert stats['total_connections'] == 0, "Should have 0 connections after disconnect"
-        assert stats['active_processors'] == 0, "Should have 0 processors after disconnect"
+        # First connection should still be active
+        assert handler.is_connected(), "First connection should still be active"
