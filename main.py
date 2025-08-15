@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.websocket_handler import WebSocketHandler
@@ -23,6 +23,11 @@ app = FastAPI(title=settings.API_TITLE, version=settings.API_VERSION)
 # Global WebSocket handler (single connection)
 ws_handler = WebSocketHandler()
 
+# Dependency for getting the WebSocket handler
+def get_websocket_handler() -> WebSocketHandler:
+    """Dependency injection for WebSocket handler"""
+    return ws_handler
+
 @app.get("/")
 async def root():
     """Health check endpoint"""
@@ -44,9 +49,12 @@ async def health():
     }
 
 @app.websocket("/ws/video_stream")
-async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket endpoint for video stream processing"""
-    await ws_handler.handle_connection(websocket)
+async def websocket_endpoint(
+    websocket: WebSocket, 
+    handler: WebSocketHandler = Depends(get_websocket_handler)
+):
+    """WebSocket endpoint for video stream processing using dependency injection"""
+    await handler.handle_connection(websocket)
 
 if __name__ == "__main__":
     import uvicorn

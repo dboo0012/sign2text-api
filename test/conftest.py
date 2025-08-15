@@ -4,30 +4,12 @@ Shared pytest fixtures and configuration
 import sys
 import os
 import pytest
-import numpy as np
-import cv2
 from unittest.mock import Mock, AsyncMock
 
 # Add parent directory to path so we can import the app module
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.pose_processor import PoseProcessor
 from app.websocket_handler import WebSocketHandler
-
-
-@pytest.fixture(scope="session")
-def test_frame():
-    """Create a reusable test frame for all tests"""
-    frame = np.zeros((480, 640, 3), dtype=np.uint8)
-    
-    # Add some simple shapes to make it interesting for MediaPipe
-    cv2.rectangle(frame, (200, 150), (440, 330), (100, 150, 200), -1)  # Body-like rectangle
-    cv2.circle(frame, (320, 120), 40, (150, 200, 100), -1)  # Head-like circle
-    cv2.rectangle(frame, (180, 200), (220, 280), (120, 180, 150), -1)  # Left arm
-    cv2.rectangle(frame, (420, 200), (460, 280), (120, 180, 150), -1)  # Right arm
-    
-    return frame
-
 
 @pytest.fixture
 def mock_websocket():
@@ -47,9 +29,14 @@ def websocket_handler():
 
 
 @pytest.fixture
-def pose_processor():
-    """Create a PoseProcessor for tests that need MediaPipe functionality"""
-    return PoseProcessor()
+def sample_keypoints():
+    """Create sample keypoints data for testing"""
+    return {
+        "pose": [[0.5, 0.5, 0.0, 0.9]] * 33,  # 33 pose landmarks
+        "face": [[0.5, 0.5, 0.0]] * 468,       # 468 face landmarks
+        "left_hand": [[0.3, 0.5, 0.0]] * 21,   # 21 left hand landmarks
+        "right_hand": [[0.7, 0.5, 0.0]] * 21   # 21 right hand landmarks
+    }
 
 
 # Pytest configuration

@@ -27,14 +27,12 @@ class Settings:
         "*"  # In production, remove this and specify exact origins
     ]
     
-    # MediaPipe Configuration
-    MEDIAPIPE_CONFIG = {
-        "static_image_mode": False,
-        "model_complexity": 1,
-        "enable_segmentation": False,
-        "refine_face_landmarks": True,
-        "min_detection_confidence": 0.5,
-        "min_tracking_confidence": 0.5
+    # Processing Configuration (for client-side keypoints)
+    KEYPOINTS_CONFIG = {
+        "max_pose_landmarks": 33,
+        "max_face_landmarks": 468,
+        "max_hand_landmarks": 21,
+        "required_confidence": 0.5
     }
     
     # WebSocket Configuration

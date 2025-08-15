@@ -13,7 +13,6 @@ from unittest.mock import Mock, AsyncMock, patch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.websocket_handler import WebSocketHandler
-from app.pose_processor import PoseProcessor
 
 
 class TestWebSocketHandler:
@@ -34,21 +33,9 @@ class TestWebSocketHandler:
         websocket.close = AsyncMock()
         return websocket
     
-    @pytest.fixture
-    def mock_processor_result(self):
-        """Create a mock processor result"""
-        result = Mock()
-        result.model_dump = Mock(return_value={
-            "keypoints": [],
-            "confidence": 0.95,
-            "timestamp": time.time()
-        })
-        return result
-    
     def test_handler_initialization(self, handler):
         """Test WebSocketHandler initialization"""
         assert handler.current_websocket is None, "Should start with no connection"
-        assert handler.processor is None, "Should start with no processor"
         assert handler.connected_at is None, "Should start with no connection time"
         assert handler.messages_processed == 0, "Should start with 0 messages processed"
     
@@ -69,7 +56,7 @@ class TestWebSocketHandler:
     async def test_handle_ping_message(self, handler):
         """Test handling ping message"""
         handler.current_websocket = Mock()
-        handler.current_websocket.send_text = AsyncMock()
+        handler.current_websocket.send_json = AsyncMock()
         
         timestamp = 1234567890.0
         ping_message = {
@@ -77,137 +64,103 @@ class TestWebSocketHandler:
             "timestamp": timestamp
         }
         
-        await handler._handle_ping(ping_message)
+        await handler._process_message(ping_message)
         
-        # Verify pong response was sent
-        handler.current_websocket.send_text.assert_called_once()
-        call_args = handler.current_websocket.send_text.call_args[0][0]
-        response = json.loads(call_args)
+        # Verify pong response was sent using send_json
+        handler.current_websocket.send_json.assert_called_once()
+        call_args = handler.current_websocket.send_json.call_args[0][0]
         
-        assert response["type"] == "pong", "Should respond with pong"
-        assert response["timestamp"] == timestamp, "Should echo timestamp"
+        assert call_args["type"] == "pong", "Should respond with pong"
+        assert call_args["timestamp"] == timestamp, "Should echo timestamp"
     
     @pytest.mark.asyncio
-    async def test_handle_frame_message_no_data(self, handler):
-        """Test handling frame message without frame data"""
+    async def test_handle_keypoints_message_no_data(self, handler):
+        """Test handling keypoints message without keypoints data"""
         handler.current_websocket = Mock()
-        handler.current_websocket.send_text = AsyncMock()
+        handler.current_websocket.send_json = AsyncMock()
         
-        frame_message = {
-            "type": "frame",
+        keypoints_message = {
+            "type": "keypoints_input",
             "timestamp": 1234567890.0
-            # Missing 'frame' field
+            # Missing 'keypoints' field
         }
         
-        await handler._handle_frame(frame_message)
+        await handler._process_message(keypoints_message)
         
-        # Should send error response
-        handler.current_websocket.send_text.assert_called_once()
-        call_args = handler.current_websocket.send_text.call_args[0][0]
-        response = json.loads(call_args)
+        # Should send error response for validation error
+        handler.current_websocket.send_json.assert_called_once()
+        call_args = handler.current_websocket.send_json.call_args[0][0]
         
-        assert response["type"] == "error", "Should respond with error"
-        assert "No frame data provided" in response["message"], "Should indicate missing frame data"
+        assert call_args["type"] == "error", "Should respond with error"
+        assert "Invalid message format" in call_args["message"], "Should indicate validation error"
     
     @pytest.mark.asyncio
-    async def test_handle_frame_message_no_processor(self, handler):
-        """Test handling frame message when processor is not initialized"""
+    async def test_handle_keypoints_message_success(self, handler):
+        """Test successful keypoints processing"""
         handler.current_websocket = Mock()
-        handler.current_websocket.send_text = AsyncMock()
-        handler.processor = None  # No processor
+        handler.current_websocket.send_json = AsyncMock()
         
-        frame_message = {
-            "type": "frame",
-            "frame": "test_data",
-            "timestamp": 1234567890.0
+        keypoints_message = {
+            "type": "keypoints_input",
+            "timestamp": 1234567890.0,
+            "keypoints": {
+                "pose": [[0.5, 0.5, 0.0, 0.9]],
+                "face": [[0.5, 0.5, 0.0]],
+                "left_hand": [[0.3, 0.5, 0.0]],
+                "right_hand": [[0.7, 0.5, 0.0]]
+            }
         }
         
-        await handler._handle_frame(frame_message)
+        await handler._process_message(keypoints_message)
         
-        # Should send error response
-        handler.current_websocket.send_text.assert_called_once()
-        call_args = handler.current_websocket.send_text.call_args[0][0]
-        response = json.loads(call_args)
+        # Should send success response
+        handler.current_websocket.send_json.assert_called_once()
+        call_args = handler.current_websocket.send_json.call_args[0][0]
         
-        assert response["type"] == "error", "Should respond with error"
-        assert "Pose processor not initialized" in response["message"], "Should indicate processor error"
+        assert call_args["type"] == "processing_response", "Should respond with processing_response"
+        assert call_args["success"] == True, "Should indicate success"
     
     @pytest.mark.asyncio
-    async def test_handle_frame_message_decode_failure(self, handler, mock_processor_result):
-        """Test handling frame message when decoding fails"""
+    async def test_handle_keypoints_message_empty_data(self, handler):
+        """Test handling keypoints message with empty keypoints"""
         handler.current_websocket = Mock()
-        handler.current_websocket.send_text = AsyncMock()
+        handler.current_websocket.send_json = AsyncMock()
         
-        # Mock processor
-        handler.processor = Mock()
-        handler.processor.decode_base64_frame = Mock(return_value=None)  # Decode failure
-        
-        frame_message = {
-            "type": "frame",
-            "frame": "invalid_base64_data",
-            "timestamp": 1234567890.0
+        keypoints_message = {
+            "type": "keypoints_input",
+            "timestamp": 1234567890.0,
+            "keypoints": {
+                "pose": [],
+                "face": [],
+                "left_hand": [],
+                "right_hand": []
+            }
         }
         
-        await handler._handle_frame(frame_message)
+        await handler._process_message(keypoints_message)
         
-        # Should send error response
-        handler.current_websocket.send_text.assert_called_once()
-        call_args = handler.current_websocket.send_text.call_args[0][0]
-        response = json.loads(call_args)
+        # Should send response indicating no data
+        handler.current_websocket.send_json.assert_called_once()
+        call_args = handler.current_websocket.send_json.call_args[0][0]
         
-        assert response["type"] == "error", "Should respond with error"
-        assert "Failed to decode image" in response["message"], "Should indicate decode failure"
-    
-    @pytest.mark.asyncio
-    async def test_handle_frame_message_success(self, handler, mock_processor_result):
-        """Test successful frame processing"""
-        handler.current_websocket = Mock()
-        handler.current_websocket.send_text = AsyncMock()
-        
-        # Mock processor
-        handler.processor = Mock()
-        mock_frame = Mock()
-        handler.processor.decode_base64_frame = Mock(return_value=mock_frame)
-        handler.processor.process_frame = Mock(return_value=mock_processor_result)
-        
-        timestamp = 1234567890.0
-        frame_message = {
-            "type": "frame",
-            "frame": "valid_base64_data",
-            "timestamp": timestamp
-        }
-        
-        await handler._handle_frame(frame_message)
-        
-        # Verify frame processing was called
-        handler.processor.decode_base64_frame.assert_called_once_with("valid_base64_data")
-        handler.processor.process_frame.assert_called_once_with(mock_frame)
-        
-        # Verify response was sent
-        handler.current_websocket.send_text.assert_called_once()
-        call_args = handler.current_websocket.send_text.call_args[0][0]
-        response = json.loads(call_args)
-        
-        assert response["type"] == "keypoints", "Should respond with keypoints"
-        assert response["timestamp"] == timestamp, "Should echo timestamp"
-        assert "data" in response, "Should include processed data"
+        assert call_args["type"] == "processing_response", "Should respond with processing_response"
+        assert call_args["success"] == False, "Should indicate no data processed"
     
     @pytest.mark.asyncio
     async def test_send_error(self, handler):
         """Test sending error message"""
         handler.current_websocket = Mock()
-        handler.current_websocket.send_text = AsyncMock()
+        handler.current_websocket.send_json = AsyncMock()
         
         error_message = "Test error message"
         
         await handler._send_error(error_message)
         
-        handler.current_websocket.send_text.assert_called_once()
-        call_args = handler.current_websocket.send_text.call_args[0][0]
-        response = json.loads(call_args)
+        handler.current_websocket.send_json.assert_called_once()
+        call_args = handler.current_websocket.send_json.call_args[0][0]
         
-        assert response["type"] == "error", "Should be error type"
-        assert response["message"] == error_message, "Should contain error message"
+        assert call_args["type"] == "error", "Should be error type"
+        assert call_args["message"] == error_message, "Should contain error message"
     
     @pytest.mark.asyncio
     async def test_send_response_no_connection(self, handler):
@@ -215,49 +168,50 @@ class TestWebSocketHandler:
         handler.current_websocket = None
         
         # Should not raise an error
-        await handler._send_response({"type": "test"})
+        from app.models import ErrorMessage
+        test_msg = ErrorMessage(message="test")
+        await handler._send_json_response(test_msg)
     
     @pytest.mark.asyncio
-    async def test_process_invalid_json(self, handler):
-        """Test processing invalid JSON message"""
+    async def test_process_invalid_message(self, handler):
+        """Test processing invalid message structure"""
         handler.current_websocket = Mock()
-        handler.current_websocket.send_text = AsyncMock()
+        handler.current_websocket.send_json = AsyncMock()
         handler.messages_processed = 0
         
-        invalid_json = "{ invalid json }"
+        # Invalid message structure (missing required fields)
+        invalid_message = {"invalid": "structure"}
         
-        await handler._process_message(invalid_json)
+        await handler._process_message(invalid_message)
         
         # Should send error response
-        handler.current_websocket.send_text.assert_called_once()
-        call_args = handler.current_websocket.send_text.call_args[0][0]
-        response = json.loads(call_args)
+        handler.current_websocket.send_json.assert_called_once()
+        call_args = handler.current_websocket.send_json.call_args[0][0]
         
-        assert response["type"] == "error", "Should respond with error"
-        assert "Invalid JSON format" in response["message"], "Should indicate JSON error"
+        assert call_args["type"] == "error", "Should respond with error"
+        assert "Unknown message type" in call_args["message"], "Should indicate unknown type"
         assert handler.messages_processed == 1, "Should increment message counter even on error"
     
     @pytest.mark.asyncio
     async def test_process_unknown_message_type(self, handler):
         """Test processing unknown message type"""
         handler.current_websocket = Mock()
-        handler.current_websocket.send_text = AsyncMock()
+        handler.current_websocket.send_json = AsyncMock()
         handler.messages_processed = 0
         
-        unknown_message = json.dumps({
+        unknown_message = {
             "type": "unknown_type",
             "data": "some data"
-        })
+        }
         
         await handler._process_message(unknown_message)
         
         # Should send error response
-        handler.current_websocket.send_text.assert_called_once()
-        call_args = handler.current_websocket.send_text.call_args[0][0]
-        response = json.loads(call_args)
+        handler.current_websocket.send_json.assert_called_once()
+        call_args = handler.current_websocket.send_json.call_args[0][0]
         
-        assert response["type"] == "error", "Should respond with error"
-        assert "Unknown message type" in response["message"], "Should indicate unknown type"
+        assert call_args["type"] == "error", "Should respond with error"
+        assert "Unknown message type" in call_args["message"], "Should indicate unknown type"
         assert handler.messages_processed == 1, "Should increment message counter"
     
     @pytest.mark.asyncio
@@ -265,7 +219,6 @@ class TestWebSocketHandler:
         """Test that second connection is rejected"""
         # Set up a connection manually to simulate an active connection
         handler.current_websocket = Mock()
-        handler.processor = Mock()
         handler.connected_at = time.time()
         
         second_websocket = Mock()
@@ -284,7 +237,6 @@ class TestWebSocketHandler:
         """Test connection cleanup"""
         # Set up a mock connection
         handler.current_websocket = Mock()
-        handler.processor = Mock()
         handler.connected_at = time.time()
         handler.messages_processed = 5
         
@@ -293,7 +245,6 @@ class TestWebSocketHandler:
         
         # Verify cleanup
         assert handler.current_websocket is None, "Should clear websocket"
-        assert handler.processor is None, "Should clear processor"
         assert handler.connected_at is None, "Should clear connection time"
         assert handler.messages_processed == 0, "Should reset message counter"
     
@@ -339,31 +290,28 @@ class TestIntegration:
     async def test_full_message_processing_cycle(self, handler):
         """Test complete message processing cycle"""
         handler.current_websocket = Mock()
-        handler.current_websocket.send_text = AsyncMock()
+        handler.current_websocket.send_json = AsyncMock()
         
-        # Initialize processor
-        handler.processor = Mock()
-        handler.processor.decode_base64_frame = Mock(return_value=Mock())
-        
-        mock_result = Mock()
-        mock_result.model_dump = Mock(return_value={"test": "data"})
-        handler.processor.process_frame = Mock(return_value=mock_result)
-        
-        # Test ping
-        ping_data = json.dumps({"type": "ping", "timestamp": 12345})
+        # Test ping - now pass dict directly
+        ping_data = {"type": "ping", "timestamp": 12345}
         await handler._process_message(ping_data)
         
-        # Test frame
-        frame_data = json.dumps({
-            "type": "frame", 
-            "frame": "base64data", 
+        # Test keypoints - now pass dict directly  
+        keypoints_data = {
+            "type": "keypoints_input", 
+            "keypoints": {
+                "pose": [[0.5, 0.5, 0.0, 0.9]],
+                "face": [],
+                "left_hand": [],
+                "right_hand": []
+            },
             "timestamp": 67890
-        })
-        await handler._process_message(frame_data)
+        }
+        await handler._process_message(keypoints_data)
         
         # Verify both messages were processed
         assert handler.messages_processed == 2, "Should have processed 2 messages"
-        assert handler.current_websocket.send_text.call_count == 2, "Should have sent 2 responses"
+        assert handler.current_websocket.send_json.call_count == 2, "Should have sent 2 responses"
     
     @pytest.mark.asyncio
     @pytest.mark.integration  
@@ -372,7 +320,6 @@ class TestIntegration:
         # This test verifies the core requirement of single connection
         # Set up first connection manually 
         handler.current_websocket = Mock()
-        handler.processor = Mock()
         handler.connected_at = time.time()
         handler.messages_processed = 0
         
