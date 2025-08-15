@@ -22,7 +22,7 @@ class Keypoints(BaseModel):
     right_hand: List[List[float]] = Field(default_factory=list, description="Right hand landmarks [x, y, z]")
 
 class ProcessingResult(BaseModel):
-    """Result of keypoints processing (legacy/internal use)"""
+    """Result of keypoints processing"""
     success: bool
     processed_keypoints: Optional[Keypoints] = Field(default=None)
     analysis_result: Optional[Dict[str, Any]] = Field(default=None)
@@ -72,4 +72,4 @@ class RootResponse(BaseModel):
     message: str
     status: str
     active_connections: int
-    version: str 
+    version: str

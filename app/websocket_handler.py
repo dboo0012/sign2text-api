@@ -4,6 +4,7 @@ Simplified WebSocket handler for single connection processing using FastAPI buil
 from fastapi import WebSocket, WebSocketDisconnect, HTTPException
 from .logger import setup_logger
 from .models import KeypointsInputMessage, PingMessage, ProcessingResponseMessage, PongMessage, ErrorMessage, ProcessingResult
+from .keypoints_processor import KeypointsProcessor
 import time
 from typing import Optional, Union
 from pydantic import ValidationError
@@ -16,6 +17,7 @@ class WebSocketHandler:
     def __init__(self):
         """Initialize the handler with no active connection"""
         self.current_websocket: Optional[WebSocket] = None
+        self.keypoints_processor: Optional[KeypointsProcessor] = None
         self.connected_at: Optional[float] = None
         self.messages_processed: int = 0
         logger.info("WebSocket handler initialized for single connection")
@@ -37,6 +39,7 @@ class WebSocketHandler:
             # Accept the connection
             await websocket.accept()
             self.current_websocket = websocket
+            self.keypoints_processor = KeypointsProcessor()
             self.connected_at = time.time()
             self.messages_processed = 0
             
@@ -61,6 +64,7 @@ class WebSocketHandler:
             logger.info(f"Connection cleanup - processed {self.messages_processed} messages")
         
         self.current_websocket = None
+        self.keypoints_processor = None
         self.connected_at = None
         self.messages_processed = 0
 
@@ -101,55 +105,30 @@ class WebSocketHandler:
         Args:
             message: Validated KeypointsInputMessage model
         """
+        if not self.keypoints_processor:
+            await self._send_error("Keypoints processor not initialized")
+            return
+            
         try:
-            # Process the keypoints data (placeholder for your business logic)
-            success = await self._process_keypoints(message.keypoints, message.frame_info)
+            # Process keypoints using the dedicated processor
+            result = await self.keypoints_processor.process_keypoints(
+                keypoints=message.keypoints,
+                frame_info=message.frame_info,
+                timestamp=message.timestamp
+            )
             
             # Create and send response using Pydantic model
             response = ProcessingResponseMessage(
                 timestamp=message.timestamp,
-                success=success,
-                message="Keypoints processed successfully" if success else "Failed to process keypoints"
+                success=result.success,
+                message=result.error if not result.success else "Keypoints processed successfully",
+                processed_data=result.analysis_result if result.success else None
             )
             await self._send_json_response(response)
             
         except Exception as e:
             logger.error(f"Error processing keypoints: {e}")
             await self._send_error(f"Keypoints processing error: {str(e)}")
-
-    async def _process_keypoints(self, keypoints, frame_info=None):
-        """
-        Process the received keypoints data
-        
-        Args:
-            keypoints: Keypoints object containing landmark data
-            frame_info: Optional frame information
-            
-        Returns:
-            bool: True if processing was successful
-        """
-        try:
-            # Add your keypoints processing logic here
-            # For example: gesture recognition, sign language interpretation, etc.
-            
-            # Log received data for debugging
-            logger.info(f"Processing keypoints - Pose: {len(keypoints.pose)} points, "
-                       f"Face: {len(keypoints.face)} points, "
-                       f"Left hand: {len(keypoints.left_hand)} points, "
-                       f"Right hand: {len(keypoints.right_hand)} points")
-            
-            if frame_info:
-                logger.info(f"Frame info: {frame_info.width}x{frame_info.height}")
-            
-            # Placeholder: Return True if we have any keypoints data
-            has_data = (len(keypoints.pose) > 0 or len(keypoints.face) > 0 or 
-                       len(keypoints.left_hand) > 0 or len(keypoints.right_hand) > 0)
-            
-            return has_data
-            
-        except Exception as e:
-            logger.error(f"Error in keypoints processing: {e}")
-            return False
 
     async def _handle_ping(self, message: PingMessage):
         """
@@ -201,17 +180,16 @@ class WebSocketHandler:
         Returns:
             Dictionary with connection statistics
         """
-        if self.current_websocket:
-            return {
-                'connected': True,
-                'connected_at': self.connected_at,
-                'messages_processed': self.messages_processed,
-                'uptime_seconds': time.time() - self.connected_at if self.connected_at else 0
-            }
-        else:
-            return {
-                'connected': False,
-                'connected_at': None,
-                'messages_processed': 0,
-                'uptime_seconds': 0
-            }
+        stats = {
+            'connected': self.current_websocket is not None,
+            'connected_at': self.connected_at,
+            'messages_processed': self.messages_processed,
+            'uptime_seconds': time.time() - self.connected_at if self.connected_at else 0
+        }
+        
+        # Add keypoints processor stats if available
+        if self.keypoints_processor:
+            processor_stats = self.keypoints_processor.get_processing_stats()
+            stats['keypoints_processing'] = processor_stats
+            
+        return stats
