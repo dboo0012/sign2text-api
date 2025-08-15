@@ -22,10 +22,10 @@ class Keypoints(BaseModel):
     right_hand: List[List[float]] = Field(default_factory=list, description="Right hand landmarks [x, y, z]")
 
 class ProcessingResult(BaseModel):
-    """Result of frame processing"""
+    """Result of keypoints processing (legacy/internal use)"""
     success: bool
-    keypoints: Keypoints = Field(default_factory=Keypoints)
-    frame_info: FrameInfo = Field(default_factory=FrameInfo)
+    processed_keypoints: Optional[Keypoints] = Field(default=None)
+    analysis_result: Optional[Dict[str, Any]] = Field(default=None)
     error: Optional[str] = None
 
 class WebSocketMessage(BaseModel):
@@ -33,19 +33,22 @@ class WebSocketMessage(BaseModel):
     type: str
     timestamp: Optional[float] = None
 
-class FrameMessage(WebSocketMessage):
-    """Message containing frame data"""
-    type: str = "frame"
-    frame: str = Field(..., description="Base64 encoded image data")
+class KeypointsInputMessage(WebSocketMessage):
+    """Message containing keypoints data from client"""
+    type: str = "keypoint_sequence"
+    keypoints: Keypoints = Field(..., description="Keypoints data from client-side processing")
+    frame_info: Optional[FrameInfo] = Field(default=None, description="Optional frame metadata")
 
 class PingMessage(WebSocketMessage):
     """Ping message for connection health check"""
     type: str = "ping"
 
-class KeypointsMessage(WebSocketMessage):
-    """Message containing processed keypoints"""
-    type: str = "keypoints"
-    data: ProcessingResult
+class ProcessingResponseMessage(WebSocketMessage):
+    """Message containing processing response/acknowledgment"""
+    type: str = "processing_response"
+    success: bool
+    message: Optional[str] = None
+    processed_data: Optional[Dict[str, Any]] = Field(default=None, description="Any processed results")
 
 class PongMessage(WebSocketMessage):
     """Pong response message"""

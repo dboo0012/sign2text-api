@@ -1,73 +1,217 @@
 """
-WebSocket message handler for processing client requests
+Simplified WebSocket handler for single connection processing using FastAPI built-in features
 """
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket, WebSocketDisconnect, HTTPException
 from .logger import setup_logger
-from .connection_manager import ConnectionManager
-import json
+from .models import KeypointsInputMessage, PingMessage, ProcessingResponseMessage, PongMessage, ErrorMessage, ProcessingResult
+import time
+from typing import Optional, Union
+from pydantic import ValidationError
 
 logger = setup_logger(__name__)
 
 class WebSocketHandler:
-    def __init__(self, connection_manager: ConnectionManager):
-        self.connection_manager = connection_manager
+    """Simplified WebSocket handler that manages a single connection at a time"""
+    
+    def __init__(self):
+        """Initialize the handler with no active connection"""
+        self.current_websocket: Optional[WebSocket] = None
+        self.connected_at: Optional[float] = None
+        self.messages_processed: int = 0
+        logger.info("WebSocket handler initialized for single connection")
 
     async def handle_connection(self, websocket: WebSocket):
-        await self.connection_manager.connect(websocket)
-        processor = self.connection_manager.get_processor(websocket)
+        """
+        Handle a single WebSocket connection
+        
+        Args:
+            websocket: WebSocket connection object
+        """
+        # If there's already an active connection, reject the new one
+        if self.current_websocket is not None:
+            logger.warning("Connection denied, websocket connection already exists.")
+            await websocket.close(code=1008, reason="Only one connection allowed at a time")
+            return
+
         try:
-            while self.connection_manager.is_connected(websocket):
-                data = await websocket.receive_text()
-                await self._process_message(websocket, data, processor)
+            # Accept the connection
+            await websocket.accept()
+            self.current_websocket = websocket
+            self.connected_at = time.time()
+            self.messages_processed = 0
+            
+            logger.info("WebSocket connection established")
+            
+            # Handle messages until disconnection
+            while True:
+                # Use FastAPI's built-in JSON receiving
+                message_data = await websocket.receive_json()
+                await self._process_message(message_data)
+                
         except WebSocketDisconnect:
             logger.info("WebSocket connection closed by client")
         except Exception as e:
             logger.error(f"WebSocket error: {e}")
         finally:
-            self.connection_manager.disconnect(websocket)
+            self._cleanup_connection()
 
-    async def _process_message(self, websocket: WebSocket, data: str, processor):
+    def _cleanup_connection(self):
+        """Clean up the current connection and associated resources"""
+        if self.current_websocket:
+            logger.info(f"Connection cleanup - processed {self.messages_processed} messages")
+        
+        self.current_websocket = None
+        self.connected_at = None
+        self.messages_processed = 0
+
+    async def _process_message(self, message_data: dict):
+        """
+        Process incoming WebSocket message using FastAPI's built-in JSON parsing
+        
+        Args:
+            message_data: Already parsed message dictionary from websocket.receive_json()
+        """
+        self.messages_processed += 1
+        
         try:
-            message = json.loads(data)
-            msg_type = message.get('type')
-            self.connection_manager.update_activity(websocket)
-            if msg_type == 'frame':
-                await self._handle_frame(websocket, message, processor)
+            msg_type = message_data.get('type')
+            
+            if msg_type == 'keypoint_sequence':
+                # Validate using Pydantic model
+                keypoints_msg = KeypointsInputMessage(**message_data)
+                await self._handle_keypoints_input(keypoints_msg)
             elif msg_type == 'ping':
-                await self._handle_ping(websocket, message)
+                # Validate using Pydantic model
+                ping_msg = PingMessage(**message_data)
+                await self._handle_ping(ping_msg)
             else:
-                await self._send_error(websocket, f"Unknown message type: {msg_type}")
-        except json.JSONDecodeError:
-            await self._send_error(websocket, "Invalid JSON format")
+                await self._send_error(f"Unknown message type: {msg_type}")
+                
+        except ValidationError as e:
+            logger.error(f"Message validation error: {e}")
+            await self._send_error(f"Invalid message format: {str(e)}")
         except Exception as e:
             logger.error(f"Error processing message: {e}")
-            await self._send_error(websocket, f"Message processing error: {str(e)}")
+            await self._send_error(f"Message processing error: {str(e)}")
 
-    async def _handle_frame(self, websocket: WebSocket, message, processor):
-        frame_data = message.get('frame')
-        timestamp = message.get('timestamp')
-        if not frame_data:
-            await self._send_error(websocket, "No frame data provided")
-            return
-        frame = processor.decode_base64_frame(frame_data)
-        if frame is None:
-            await self._send_error(websocket, "Failed to decode image")
-            return
-        result = processor.process_frame(frame)
-        await websocket.send_text(json.dumps({
-            'type': 'keypoints',
-            'timestamp': timestamp,
-            'data': result.model_dump()
-        }))
+    async def _handle_keypoints_input(self, message: KeypointsInputMessage):
+        """
+        Handle keypoints input message using validated Pydantic model
+        
+        Args:
+            message: Validated KeypointsInputMessage model
+        """
+        try:
+            # Process the keypoints data (placeholder for your business logic)
+            success = await self._process_keypoints(message.keypoints, message.frame_info)
+            
+            # Create and send response using Pydantic model
+            response = ProcessingResponseMessage(
+                timestamp=message.timestamp,
+                success=success,
+                message="Keypoints processed successfully" if success else "Failed to process keypoints"
+            )
+            await self._send_json_response(response)
+            
+        except Exception as e:
+            logger.error(f"Error processing keypoints: {e}")
+            await self._send_error(f"Keypoints processing error: {str(e)}")
 
-    async def _handle_ping(self, websocket: WebSocket, message):
-        await websocket.send_text(json.dumps({
-            'type': 'pong',
-            'timestamp': message.get('timestamp')
-        }))
+    async def _process_keypoints(self, keypoints, frame_info=None):
+        """
+        Process the received keypoints data
+        
+        Args:
+            keypoints: Keypoints object containing landmark data
+            frame_info: Optional frame information
+            
+        Returns:
+            bool: True if processing was successful
+        """
+        try:
+            # Add your keypoints processing logic here
+            # For example: gesture recognition, sign language interpretation, etc.
+            
+            # Log received data for debugging
+            logger.info(f"Processing keypoints - Pose: {len(keypoints.pose)} points, "
+                       f"Face: {len(keypoints.face)} points, "
+                       f"Left hand: {len(keypoints.left_hand)} points, "
+                       f"Right hand: {len(keypoints.right_hand)} points")
+            
+            if frame_info:
+                logger.info(f"Frame info: {frame_info.width}x{frame_info.height}")
+            
+            # Placeholder: Return True if we have any keypoints data
+            has_data = (len(keypoints.pose) > 0 or len(keypoints.face) > 0 or 
+                       len(keypoints.left_hand) > 0 or len(keypoints.right_hand) > 0)
+            
+            return has_data
+            
+        except Exception as e:
+            logger.error(f"Error in keypoints processing: {e}")
+            return False
 
-    async def _send_error(self, websocket: WebSocket, message: str):
-        await websocket.send_text(json.dumps({
-            'type': 'error',
-            'message': message
-        }))
+    async def _handle_ping(self, message: PingMessage):
+        """
+        Handle ping message using validated Pydantic model
+        
+        Args:
+            message: Validated PingMessage model
+        """
+        response = PongMessage(timestamp=message.timestamp)
+        await self._send_json_response(response)
+
+    async def _send_error(self, error_message: str):
+        """
+        Send error message to client using Pydantic model
+        
+        Args:
+            error_message: Error message to send
+        """
+        error_response = ErrorMessage(message=error_message)
+        await self._send_json_response(error_response)
+
+    async def _send_json_response(self, response: Union[ProcessingResponseMessage, PongMessage, ErrorMessage]):
+        """
+        Send response to the current WebSocket connection using FastAPI's send_json
+        
+        Args:
+            response: Pydantic model response to send
+        """
+        if self.current_websocket:
+            try:
+                # Use FastAPI's built-in JSON sending with Pydantic model
+                await self.current_websocket.send_json(response.model_dump())
+            except Exception as e:
+                logger.error(f"Failed to send response: {e}")
+
+    def is_connected(self) -> bool:
+        """
+        Check if there's an active connection
+        
+        Returns:
+            True if there's an active connection
+        """
+        return self.current_websocket is not None
+
+    def get_connection_stats(self) -> dict:
+        """
+        Get statistics about the current connection
+        
+        Returns:
+            Dictionary with connection statistics
+        """
+        if self.current_websocket:
+            return {
+                'connected': True,
+                'connected_at': self.connected_at,
+                'messages_processed': self.messages_processed,
+                'uptime_seconds': time.time() - self.connected_at if self.connected_at else 0
+            }
+        else:
+            return {
+                'connected': False,
+                'connected_at': None,
+                'messages_processed': 0,
+                'uptime_seconds': 0
+            }
