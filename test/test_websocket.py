@@ -75,15 +75,57 @@ class TestWebSocketHandler:
         assert call_args["timestamp"] == timestamp, "Should echo timestamp"
     
     @pytest.mark.asyncio
-    async def test_handle_keypoints_message_no_data(self, handler):
-        """Test handling keypoints message without keypoints data"""
+    async def test_handle_keypoints_message_new_format(self, handler):
+        """Test handling keypoints message with new packet structure"""
         handler.current_websocket = Mock()
         handler.current_websocket.send_json = AsyncMock()
         
         keypoints_message = {
-            "type": "keypoint_sequence",  # Updated to new message type
+            "type": "keypoint_sequence",
+            "sequence_id": "demo_1724312345678_frame_42",
+            "format": "openpose_raw",
+            "timestamp": 1234567890.0,
+            "keypoints": {
+                "version": 1.0,
+                "people": [
+                    {
+                        "person_id": [0],
+                        "pose_keypoints_2d": [0.5, 0.5, 0.9] * 25,  # 25 pose keypoints * 3
+                        "face_keypoints_2d": [0.5, 0.4, 0.8] * 70,  # 70 face keypoints * 3
+                        "hand_left_keypoints_2d": [0.3, 0.6, 0.7] * 21,  # 21 hand keypoints * 3
+                        "hand_right_keypoints_2d": [0.7, 0.6, 0.7] * 21,  # 21 hand keypoints * 3
+                        "pose_keypoints_3d": [0.5, 0.5, 0.0, 0.9] * 25,  # 25 pose keypoints * 4
+                        "face_keypoints_3d": [0.5, 0.4, 0.0, 0.8] * 70,  # 70 face keypoints * 4
+                        "hand_left_keypoints_3d": [0.3, 0.6, 0.0, 0.7] * 21,  # 21 hand keypoints * 4
+                        "hand_right_keypoints_3d": [0.7, 0.6, 0.0, 0.7] * 21  # 21 hand keypoints * 4
+                    }
+                ]
+            }
+        }
+        
+        await handler._process_message(keypoints_message)
+        
+        # Should send success response
+        handler.current_websocket.send_json.assert_called_once()
+        call_args = handler.current_websocket.send_json.call_args[0][0]
+        
+        assert call_args["type"] == "processing_response", "Should respond with processing_response"
+        assert call_args["success"] == True, "Should indicate success"
+        assert "demo_1724312345678_frame_42" in call_args["message"], "Should reference sequence_id"
+        if call_args.get("processed_data"):
+            assert call_args["processed_data"]["sequence_id"] == "demo_1724312345678_frame_42", "Should include sequence_id in response"
+            assert call_args["processed_data"]["format"] == "openpose_raw", "Should include format in response"
+    
+    @pytest.mark.asyncio
+    async def test_handle_keypoints_message_no_data(self, handler):
+        """Test handling keypoints message without required data"""
+        handler.current_websocket = Mock()
+        handler.current_websocket.send_json = AsyncMock()
+        
+        keypoints_message = {
+            "type": "keypoint_sequence",
             "timestamp": 1234567890.0
-            # Missing 'keypoints' field
+            # Missing required 'sequence_id' and 'keypoints' fields
         }
         
         await handler._process_message(keypoints_message)
@@ -96,45 +138,19 @@ class TestWebSocketHandler:
         assert "Invalid message format" in call_args["message"], "Should indicate validation error"
     
     @pytest.mark.asyncio
-    async def test_handle_keypoints_message_success(self, handler):
-        """Test successful keypoints processing"""
-        handler.current_websocket = Mock()
-        handler.current_websocket.send_json = AsyncMock()
-        
-        keypoints_message = {
-            "type": "keypoint_sequence",  # Updated to new message type
-            "timestamp": 1234567890.0,
-            "keypoints": {
-                "pose": [[0.5, 0.5, 0.0, 0.9]],
-                "face": [[0.5, 0.5, 0.0]],
-                "left_hand": [[0.3, 0.5, 0.0]],
-                "right_hand": [[0.7, 0.5, 0.0]]
-            }
-        }
-        
-        await handler._process_message(keypoints_message)
-        
-        # Should send success response
-        handler.current_websocket.send_json.assert_called_once()
-        call_args = handler.current_websocket.send_json.call_args[0][0]
-        
-        assert call_args["type"] == "processing_response", "Should respond with processing_response"
-        assert call_args["success"] == True, "Should indicate success"
-    
-    @pytest.mark.asyncio
     async def test_handle_keypoints_message_empty_data(self, handler):
-        """Test handling keypoints message with empty keypoints"""
+        """Test handling keypoints message with empty OpenPose data"""
         handler.current_websocket = Mock()
         handler.current_websocket.send_json = AsyncMock()
         
         keypoints_message = {
-            "type": "keypoint_sequence",  # Updated to new message type
+            "type": "keypoint_sequence",
+            "sequence_id": "demo_empty_1724312345678_frame_1",
+            "format": "openpose_raw",
             "timestamp": 1234567890.0,
             "keypoints": {
-                "pose": [],
-                "face": [],
-                "left_hand": [],
-                "right_hand": []
+                "version": 1.0,
+                "people": []  # No people detected
             }
         }
         
@@ -298,14 +314,26 @@ class TestIntegration:
         ping_data = {"type": "ping", "timestamp": 12345}
         await handler._process_message(ping_data)
         
-        # Test keypoints - now pass dict directly  
+        # Test keypoints - now pass dict directly with new format
         keypoints_data = {
-            "type": "keypoint_sequence",  # Updated to new message type
+            "type": "keypoint_sequence",
+            "sequence_id": "test_sequence_12345",
+            "format": "openpose_raw",
             "keypoints": {
-                "pose": [[0.5, 0.5, 0.0, 0.9]],
-                "face": [],
-                "left_hand": [],
-                "right_hand": []
+                "version": 1.0,
+                "people": [
+                    {
+                        "person_id": [0],
+                        "pose_keypoints_2d": [0.5, 0.5, 0.9] * 25,
+                        "face_keypoints_2d": [],
+                        "hand_left_keypoints_2d": [],
+                        "hand_right_keypoints_2d": [],
+                        "pose_keypoints_3d": [],
+                        "face_keypoints_3d": [],
+                        "hand_left_keypoints_3d": [],
+                        "hand_right_keypoints_3d": []
+                    }
+                ]
             },
             "timestamp": 67890
         }

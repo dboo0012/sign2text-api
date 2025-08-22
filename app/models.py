@@ -224,19 +224,26 @@ class WebSocketMessage(BaseModel):
     timestamp: Optional[float] = None
 
 class KeypointsInputMessage(WebSocketMessage):
-    """Message containing keypoints data from client"""
+    """Message containing keypoints data from client with new packet structure"""
     type: str = "keypoint_sequence"
-    keypoints: Optional[Union[Keypoints, StructuredKeypoints, OpenPoseData]] = Field(default=None, description="Keypoints data")
-    openpose_data: Optional[OpenPoseData] = Field(default=None, description="Raw OpenPose JSON data")
+    sequence_id: str = Field(description="Unique identifier for the sequence frame, e.g., 'demo_1724312345678_frame_42'")
+    keypoints: OpenPoseData = Field(description="The raw OpenPose data structure")
+    format: str = Field(default="openpose_raw", description="Indicates the data format")
     frame_info: Optional[FrameInfo] = Field(default=None, description="Optional frame metadata")
     
-    @validator('keypoints', 'openpose_data')
-    def validate_keypoint_data(cls, v, values):
-        """Ensure at least one type of keypoint data is provided"""
-        keypoints = values.get('keypoints')
-        openpose_data = values.get('openpose_data') 
-        if not keypoints and not openpose_data and not v:
-            raise ValueError("Either keypoints or openpose_data must be provided")
+    @validator('format')
+    def validate_format(cls, v):
+        """Ensure format is supported"""
+        supported_formats = ["openpose_raw"]
+        if v not in supported_formats:
+            raise ValueError(f"Unsupported format: {v}. Supported formats: {supported_formats}")
+        return v
+    
+    @validator('keypoints')
+    def validate_keypoints(cls, v):
+        """Ensure keypoints data is provided"""
+        if not v:
+            raise ValueError("keypoints data must be provided")
         return v
 
 class PingMessage(WebSocketMessage):
@@ -245,7 +252,7 @@ class PingMessage(WebSocketMessage):
 
 class ProcessingResponseMessage(WebSocketMessage):
     """Message containing processing response/acknowledgment"""
-    type: str = "processing_response"
+    type: str = "success"
     success: bool
     message: Optional[str] = None
     processed_data: Optional[Dict[str, Any]] = Field(default=None, description="Any processed results")

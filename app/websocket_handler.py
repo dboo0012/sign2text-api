@@ -100,35 +100,43 @@ class WebSocketHandler:
 
     async def _handle_keypoints_input(self, message: KeypointsInputMessage):
         """
-        Handle keypoints input message using validated Pydantic model
+        Handle keypoints input message using validated Pydantic model with new packet structure
         
         Args:
-            message: Validated KeypointsInputMessage model
+            message: Validated KeypointsInputMessage model with sequence_id and OpenPose data
         """
         if not self.keypoints_processor:
             await self._send_error("Keypoints processor not initialized")
             return
             
         try:
+            logger.info(f"Processing keypoint sequence: {message.sequence_id}")
+            
             # Process keypoints using the dedicated processor
             result = await self.keypoints_processor.process_keypoints(
-                keypoints=message.keypoints,
+                keypoint_data=message.keypoints,  # This is now the OpenPoseData structure
                 frame_info=message.frame_info,
                 timestamp=message.timestamp
             )
             
             # Create and send response using Pydantic model
+            response_data = result.analysis_result if result.success else None
+            if response_data:
+                # Add sequence_id to the response for correlation
+                response_data["sequence_id"] = message.sequence_id
+                response_data["format"] = message.format
+            
             response = ProcessingResponseMessage(
                 timestamp=message.timestamp,
                 success=result.success,
-                message=result.error if not result.success else "Keypoints processed successfully",
-                processed_data=result.analysis_result if result.success else None
+                message=result.error if not result.success else f"Sequence {message.sequence_id} processed successfully",
+                processed_data=response_data
             )
             await self._send_json_response(response)
             
         except Exception as e:
-            logger.error(f"Error processing keypoints: {e}")
-            await self._send_error(f"Keypoints processing error: {str(e)}")
+            logger.error(f"Error processing keypoints for sequence {message.sequence_id}: {e}")
+            await self._send_error(f"Keypoints processing error for {message.sequence_id}: {str(e)}")
 
     async def _handle_ping(self, message: PingMessage):
         """
