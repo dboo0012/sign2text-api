@@ -38,6 +38,7 @@ class TestWebSocketHandler:
         assert handler.current_websocket is None, "Should start with no connection"
         assert handler.connected_at is None, "Should start with no connection time"
         assert handler.messages_processed == 0, "Should start with 0 messages processed"
+        assert handler.keypoints_processor is None, "Should start with no keypoints processor"
     
     def test_is_connected_false_initially(self, handler):
         """Test is_connected returns False initially"""
@@ -74,15 +75,57 @@ class TestWebSocketHandler:
         assert call_args["timestamp"] == timestamp, "Should echo timestamp"
     
     @pytest.mark.asyncio
-    async def test_handle_keypoints_message_no_data(self, handler):
-        """Test handling keypoints message without keypoints data"""
+    async def test_handle_keypoints_message_new_format(self, handler):
+        """Test handling keypoints message with new packet structure"""
         handler.current_websocket = Mock()
         handler.current_websocket.send_json = AsyncMock()
         
         keypoints_message = {
-            "type": "keypoints_input",
+            "type": "keypoint_sequence",
+            "sequence_id": "demo_1724312345678_frame_42",
+            "format": "openpose_raw",
+            "timestamp": 1234567890.0,
+            "keypoints": {
+                "version": 1.0,
+                "people": [
+                    {
+                        "person_id": [0],
+                        "pose_keypoints_2d": [0.5, 0.5, 0.9] * 25,  # 25 pose keypoints * 3
+                        "face_keypoints_2d": [0.5, 0.4, 0.8] * 70,  # 70 face keypoints * 3
+                        "hand_left_keypoints_2d": [0.3, 0.6, 0.7] * 21,  # 21 hand keypoints * 3
+                        "hand_right_keypoints_2d": [0.7, 0.6, 0.7] * 21,  # 21 hand keypoints * 3
+                        "pose_keypoints_3d": [0.5, 0.5, 0.0, 0.9] * 25,  # 25 pose keypoints * 4
+                        "face_keypoints_3d": [0.5, 0.4, 0.0, 0.8] * 70,  # 70 face keypoints * 4
+                        "hand_left_keypoints_3d": [0.3, 0.6, 0.0, 0.7] * 21,  # 21 hand keypoints * 4
+                        "hand_right_keypoints_3d": [0.7, 0.6, 0.0, 0.7] * 21  # 21 hand keypoints * 4
+                    }
+                ]
+            }
+        }
+        
+        await handler._process_message(keypoints_message)
+        
+        # Should send success response
+        handler.current_websocket.send_json.assert_called_once()
+        call_args = handler.current_websocket.send_json.call_args[0][0]
+        
+        assert call_args["type"] == "processing_response", "Should respond with processing_response"
+        assert call_args["success"] == True, "Should indicate success"
+        assert "demo_1724312345678_frame_42" in call_args["message"], "Should reference sequence_id"
+        if call_args.get("processed_data"):
+            assert call_args["processed_data"]["sequence_id"] == "demo_1724312345678_frame_42", "Should include sequence_id in response"
+            assert call_args["processed_data"]["format"] == "openpose_raw", "Should include format in response"
+    
+    @pytest.mark.asyncio
+    async def test_handle_keypoints_message_no_data(self, handler):
+        """Test handling keypoints message without required data"""
+        handler.current_websocket = Mock()
+        handler.current_websocket.send_json = AsyncMock()
+        
+        keypoints_message = {
+            "type": "keypoint_sequence",
             "timestamp": 1234567890.0
-            # Missing 'keypoints' field
+            # Missing required 'sequence_id' and 'keypoints' fields
         }
         
         await handler._process_message(keypoints_message)
@@ -95,45 +138,19 @@ class TestWebSocketHandler:
         assert "Invalid message format" in call_args["message"], "Should indicate validation error"
     
     @pytest.mark.asyncio
-    async def test_handle_keypoints_message_success(self, handler):
-        """Test successful keypoints processing"""
-        handler.current_websocket = Mock()
-        handler.current_websocket.send_json = AsyncMock()
-        
-        keypoints_message = {
-            "type": "keypoints_input",
-            "timestamp": 1234567890.0,
-            "keypoints": {
-                "pose": [[0.5, 0.5, 0.0, 0.9]],
-                "face": [[0.5, 0.5, 0.0]],
-                "left_hand": [[0.3, 0.5, 0.0]],
-                "right_hand": [[0.7, 0.5, 0.0]]
-            }
-        }
-        
-        await handler._process_message(keypoints_message)
-        
-        # Should send success response
-        handler.current_websocket.send_json.assert_called_once()
-        call_args = handler.current_websocket.send_json.call_args[0][0]
-        
-        assert call_args["type"] == "processing_response", "Should respond with processing_response"
-        assert call_args["success"] == True, "Should indicate success"
-    
-    @pytest.mark.asyncio
     async def test_handle_keypoints_message_empty_data(self, handler):
-        """Test handling keypoints message with empty keypoints"""
+        """Test handling keypoints message with empty OpenPose data"""
         handler.current_websocket = Mock()
         handler.current_websocket.send_json = AsyncMock()
         
         keypoints_message = {
-            "type": "keypoints_input",
+            "type": "keypoint_sequence",
+            "sequence_id": "demo_empty_1724312345678_frame_1",
+            "format": "openpose_raw",
             "timestamp": 1234567890.0,
             "keypoints": {
-                "pose": [],
-                "face": [],
-                "left_hand": [],
-                "right_hand": []
+                "version": 1.0,
+                "people": []  # No people detected
             }
         }
         
@@ -247,6 +264,7 @@ class TestWebSocketHandler:
         assert handler.current_websocket is None, "Should clear websocket"
         assert handler.connected_at is None, "Should clear connection time"
         assert handler.messages_processed == 0, "Should reset message counter"
+        assert handler.keypoints_processor is None, "Should clear keypoints processor"
     
     @pytest.mark.asyncio
     async def test_get_connection_stats_with_connection(self, handler):
@@ -296,14 +314,26 @@ class TestIntegration:
         ping_data = {"type": "ping", "timestamp": 12345}
         await handler._process_message(ping_data)
         
-        # Test keypoints - now pass dict directly  
+        # Test keypoints - now pass dict directly with new format
         keypoints_data = {
-            "type": "keypoints_input", 
+            "type": "keypoint_sequence",
+            "sequence_id": "test_sequence_12345",
+            "format": "openpose_raw",
             "keypoints": {
-                "pose": [[0.5, 0.5, 0.0, 0.9]],
-                "face": [],
-                "left_hand": [],
-                "right_hand": []
+                "version": 1.0,
+                "people": [
+                    {
+                        "person_id": [0],
+                        "pose_keypoints_2d": [0.5, 0.5, 0.9] * 25,
+                        "face_keypoints_2d": [],
+                        "hand_left_keypoints_2d": [],
+                        "hand_right_keypoints_2d": [],
+                        "pose_keypoints_3d": [],
+                        "face_keypoints_3d": [],
+                        "hand_left_keypoints_3d": [],
+                        "hand_right_keypoints_3d": []
+                    }
+                ]
             },
             "timestamp": 67890
         }
@@ -340,3 +370,38 @@ class TestIntegration:
         
         # First connection should still be active
         assert handler.is_connected(), "First connection should still be active"
+
+
+class TestKeypointsProcessor:
+    """Test keypoints processor functionality"""
+    
+    @pytest.mark.asyncio
+    async def test_keypoints_processor_integration(self):
+        """Test that the keypoints processor is properly integrated"""
+        from app.keypoints_processor import KeypointsProcessor
+        from app.models import Keypoints, FrameInfo
+        
+        processor = KeypointsProcessor()
+        
+        # Test with sample keypoints
+        keypoints = Keypoints(
+            pose=[[0.5, 0.5, 0.0, 0.9]],
+            face=[[0.5, 0.4, 0.0]],
+            left_hand=[[0.3, 0.6, 0.0]],
+            right_hand=[[0.7, 0.6, 0.0]]
+        )
+        
+        frame_info = FrameInfo(
+            width=640,
+            height=480,
+            has_pose=True,
+            has_face=True,
+            has_left_hand=True,
+            has_right_hand=True
+        )
+        
+        result = await processor.process_keypoints(keypoints, frame_info, 1234567890.0)
+        
+        assert result.success is True, "Should successfully process keypoints"
+        assert result.analysis_result is not None, "Should return analysis results"
+        assert "processing_info" in result.analysis_result, "Should contain processing info"
