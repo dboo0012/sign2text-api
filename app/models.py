@@ -14,7 +14,7 @@ class FrameInfo(BaseModel):
     has_left_hand: bool
     has_right_hand: bool
 
-# Keypoint data types based on OpenPose/MediaPipe format
+# Keypoint data types based on OpenPose format
 class Point2D(BaseModel):
     """2D coordinate point"""
     x: float
@@ -269,7 +269,6 @@ class ErrorMessage(WebSocketMessage):
 class HealthResponse(BaseModel):
     """Health check response"""
     status: str
-    mediapipe_available: bool
     active_connections: int
     version: str
     timestamp: datetime = Field(default_factory=datetime.now)

@@ -52,9 +52,6 @@ def pytest_configure(config):
         "markers", "slow: Slow running tests"
     )
     config.addinivalue_line(
-        "markers", "mediapipe: Tests requiring MediaPipe"
-    )
-    config.addinivalue_line(
         "markers", "websocket: WebSocket related tests"
     )
 
@@ -62,10 +59,6 @@ def pytest_configure(config):
 def pytest_collection_modifyitems(config, items):
     """Automatically mark tests based on their location/content"""
     for item in items:
-        # Mark MediaPipe tests
-        if "mediapipe" in item.nodeid.lower() or any("mediapipe" in marker.name for marker in item.iter_markers()):
-            item.add_marker(pytest.mark.mediapipe)
-        
         # Mark WebSocket tests
         if "websocket" in item.nodeid.lower() or any("websocket" in marker.name for marker in item.iter_markers()):
             item.add_marker(pytest.mark.websocket)
@@ -75,16 +68,10 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(pytest.mark.slow)
 
 
-# Skip MediaPipe tests if not available
+# Skip tests based on markers
 def pytest_runtest_setup(item):
     """Skip tests if required dependencies are not available"""
     markers = [marker.name for marker in item.iter_markers()]
-    
-    if "mediapipe" in markers:
-        try:
-            import mediapipe
-        except ImportError:
-            pytest.skip("MediaPipe not available - install with: pip install mediapipe")
     
     # Skip slow tests by default unless explicitly requested
     if "slow" in markers and not item.config.getoption("--run-slow", default=False):

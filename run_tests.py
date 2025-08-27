@@ -75,33 +75,25 @@ def main():
     suite_1 = {
         "name": "Fast Unit Tests", 
         "cmd": ["python", "-m", "pytest", "-v", "-m", "not slow", "--tb=short"],
-        "description": "WebSocket handlers, models, and mocked tests"
+        "description": "WebSocket handlers, models, and core tests"
     }
     test_suites.append(suite_1)
     
-    # Test Suite 2: MediaPipe Tests (Mocked)
+    # Test Suite 2: Integration Tests  
     suite_2 = {
-        "name": "MediaPipe Tests (Mocked)",
-        "cmd": ["python", "-m", "pytest", "-v", "-m", "mediapipe and not slow", "--tb=short"],
-        "description": "Pose processing with mocked MediaPipe"
-    }
-    test_suites.append(suite_2)
-    
-    # Test Suite 3: Integration Tests  
-    suite_3 = {
         "name": "Integration Tests",
         "cmd": ["python", "-m", "pytest", "-v", "-m", "integration", "--tb=short"],
         "description": "Component interaction tests"
     }
-    test_suites.append(suite_3)
+    test_suites.append(suite_2)
     
-    # Test Suite 4: All Tests (Comprehensive)
-    suite_4 = {
+    # Test Suite 3: All Tests (Comprehensive)
+    suite_3 = {
         "name": "All Tests (Except Slow)",
         "cmd": ["python", "-m", "pytest", "-v", "-m", "not slow", "--tb=line"],
         "description": "Complete test suite excluding slow tests"
     }
-    test_suites.append(suite_4)
+    test_suites.append(suite_3)
     
     # Run all test suites
     results = []
