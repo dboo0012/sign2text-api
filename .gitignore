@@ -7,4 +7,5 @@ __pycache__/
 .pytest_cache/
 .__MACOSX/
 __MACOSX/
+model/how2sign/vn_model/glofe_vn_how2sign_0224.pt
 
