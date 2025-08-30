@@ -5,3 +5,7 @@ __pycache__/
 .vscode/
 .coverage
 .pytest_cache/
+.__MACOSX/
+__MACOSX/
+json/
+

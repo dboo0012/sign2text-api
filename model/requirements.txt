@@ -1,0 +1,5 @@
+pandas
+transformers
+tensorboardX
+einops
+urllib3<2
