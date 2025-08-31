@@ -1,5 +1,6 @@
 
 import sys
+import os
 sys.path.append('..')
 from models.ctrgcn_base_p76 import Model as PoseBackbone
 
@@ -170,7 +171,7 @@ class OPPartedPoseBackbone(nn.Module):
                 num_class=2000, num_point=78, num_person=1, 
                 graph='models.graph.openpose_78.Graph',
                 graph_args={'labeling_mode': 'spatial'}, drop_out=0)
-        pose_weights = torch.load('models/ckpt/ctr_op78_mix_HF05_F64_e1/runs-82-93316.pt')
+        pose_weights = torch.load(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'models', 'ckpt', 'ctr_op78_mix_HF05_F64_e1', 'runs-82-93316.pt'))
         # output [B C T V]
         self.pose_model.load_state_dict(pose_weights, strict=False)
         self.feat_dim = self.pose_model.fc.in_features * 4

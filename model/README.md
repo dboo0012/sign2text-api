@@ -1,5 +1,7 @@
 # 🖐️GloFE: Gloss-Free End-to-End Sign Language Translation
+
 🌟Accepted at ACL 2023 main conference as Oral. [GloFE: Gloss-Free End-to-End Sign Language Translation](https://arxiv.org/abs/2305.12876)(arXiv).
+
 <!-- <div align="center">
 <img src="figs/framework.png" width="95%">
 </div> -->esting (SIT/UAT Support, Troubleshooting)
@@ -16,19 +18,26 @@ Example Q: “If a tester reports that a page crashes, how would you troubleshoo
 ![teaser](figs/framework.png)
 
 ## Pre-trained Weights
+
 ### OpenASL
-| Model Name | BLEU-4 | BLEURT | link |
-|-|-|-|-|
-| GloFE(VN) | 7.06 | 36.35 | [Google Drive](https://drive.google.com/file/d/18jwr8I7utzkBuRMOK5JLIyjvZIKQkWBi/view?usp=sharing) |
-| GloFE(N)  | 6.82 | 36.68 | [Google Drive](https://drive.google.com/file/d/1_u0FT7SaREUGEYVaC9iZEICdbdE8dazs/view?usp=sharing) |
+
+| Model Name | BLEU-4 | BLEURT | link                                                                                               |
+| ---------- | ------ | ------ | -------------------------------------------------------------------------------------------------- |
+| GloFE(VN)  | 7.06   | 36.35  | [Google Drive](https://drive.google.com/file/d/18jwr8I7utzkBuRMOK5JLIyjvZIKQkWBi/view?usp=sharing) |
+| GloFE(N)   | 6.82   | 36.68  | [Google Drive](https://drive.google.com/file/d/1_u0FT7SaREUGEYVaC9iZEICdbdE8dazs/view?usp=sharing) |
+
 ### How2Sign
-| Model Name | BLEU-4 | BLEURT | link |
-|-|-|-|-|
-| GloFE(VN) | 2.24 | 31.65 | [Google Drive](https://drive.google.com/file/d/1ASf_UrKJ9hMd4_NIwj1Ov2WOOf4dK0lT/view?usp=sharing) |
+
+| Model Name | BLEU-4 | BLEURT | link                                                                                               |
+| ---------- | ------ | ------ | -------------------------------------------------------------------------------------------------- |
+| GloFE(VN)  | 2.24   | 31.65  | [Google Drive](https://drive.google.com/file/d/1ASf_UrKJ9hMd4_NIwj1Ov2WOOf4dK0lT/view?usp=sharing) |
 
 ## Data Prepreation
+
 ### File structure for OpenASL dataset
+
 Since OpenASL does not provide pose data, we need to extract using MMPose and organize the extracted features in the following fashion:
+
 ```bash
 /path/to/OpenASL
 ├── mmpose
@@ -39,6 +48,7 @@ Since OpenASL does not provide pose data, we need to extract using MMPose and or
 ```
 
 ### File structure for How2Sign dataset
+
 ```bash
 /path/to/How2Sign
 ├── openpose_output
@@ -49,8 +59,11 @@ Since OpenASL does not provide pose data, we need to extract using MMPose and or
 │   │   │   ├── ...
 └─  └─  └─  └── 14BL0rO5e-8_3-8-rgb_front_000000000252_keypoints.json
 ```
+
 ### Extracting pose data for OpenASL using MMPose
+
 Set output path in `tools/extract_openasl_mp.py`:
+
 ```python
     # config output_root in tools/extract_openasl_mp.py
     arg_dict = {
@@ -59,18 +72,24 @@ Set output path in `tools/extract_openasl_mp.py`:
         ...
     }
 ```
+
 Generate `open_asl_samples.txt` and set it in `tools/extract_openasl_mp.py`. Each line in `open_asl_samples.txt` is the full path to the `mp4` file.
+
 ```python
     all_samples = load_sample_names('/path/to/open_asl_samples.txt')
 ```
+
 Install MMPose and set the `MMPOSE_ROOT`(path to MMPose's git dir) in `tools/extract.sh`. After installation, download the model checkpoints listed in `tools/extract.sh` and put them in `/path/to/mmpose/models`. Then run `tools/extract.sh`
+
 ```bash
     sh tools/extract.sh 0 1 0
                         │ │ └─ # GPU device-id to run on
                         │ └─── # Number of sub-splits (for parallel extraction)
                         └───── # Split id for this process
 ```
+
 If you encountered version mismatch, try the following ones (thanks to @sandeep-sm in [issue #4](https://github.com/HenryLittle/GloFE/issues/4)):
+
 ```bash
 MMPose - v0.29.0
 mmcv==1.6.2
@@ -84,33 +103,39 @@ xtcocotools==1.12
 ### Environment Setup
 
 Clone the repository:
+
 ```bash
 git clone git@github.com:HenryLittle/GloFE.git
 ```
+
 Create conda environment:
 
 ```bash
-conda create --name glofe python=3.8
-conda activate glofe
-conda install pytorch==1.10.1 torchvision==0.11.2 torchaudio==0.10.1 cudatoolkit=11.3 -c pytorch -c conda-forge
+conda create --name sign2text-api python=3.11
+conda activate sign2text-api
+# conda install pytorch==2.8.0 torchvision==0.12.6 torchaudio==2.6.0 cudatoolkit=12.6 -c pytorch -c conda-forge
+```
+
+Install NVCC and pytorch:
+
+```bash
+conda install nvidia::cuda-toolkit
+nvcc --version # ensure torch and nvcc version match
+pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu129
 pip install -r requirements.txt
 ```
-<!-- ```bash
-conda create --name glofe python=3.8
-conda activate glofe
-conda install pytorch==1.12.0 torchvision==0.13.0 torchaudio==0.12.0 cudatoolkit=11.3 -c pytorch
-pip install -r requirements.txt
-
-``` -->
 
 For inference or training, use the scripts provided in `scripts/{dataset_name}/`. All python commands or scripts should be excuted under the `GloFE` home folder.
+
 ### Inference
+
 Specifies the following argument to match your local environment before running the script (use OpenASL as an example):
- - `--work_dir_prefix`: path to the **work_dir**
- - `--work_dir`: supports two level of folders, usually in the format of \<dataset\>/\<exp_name\>
- - `--weights` : path to the folder containing downloaded **weights** and **exp_config.json** files
- - `--prefix` (Optional): name prefix of the output files
- - `--tokenizer` (Optional): path to tokenizer folder, don't need to modify unless you want to use another one
+
+- `--work_dir_prefix`: path to the **work_dir**
+- `--work_dir`: supports two level of folders, usually in the format of \<dataset\>/\<exp_name\>
+- `--weights` : path to the folder containing downloaded **weights** and **exp_config.json** files
+- `--prefix` (Optional): name prefix of the output files
+- `--tokenizer` (Optional): path to tokenizer folder, don't need to modify unless you want to use another one
 
 ```bash
 # scripts/openasl/test.sh
@@ -124,14 +149,15 @@ python train_openasl_pose_DDP_inter_VN.py \
     --phase test --weights "work_dir/openasl/vn_model/glofe_vn_openasl.pt"
 ```
 
+### Train
 
-### Train 
 For training, we provide DDP script and single card script. Specifies the following argument to match your local environment before running the script (use OpenASL as an example):
- - `--work_dir_prefix`: path to the **work_dir**
- - `--work_dir`: supports two level of folders, usually in the format of \<dataset\>/\<exp_name\>
- - `--feat_path`: path to the extracted pose features
- - `--label_path`: path to the **openasl-v1.0.tsv** provided by OpenASL
- - `--tokenizer` (Optional): path to tokenizer folder, don't need to modify unless you want to use another one
+
+- `--work_dir_prefix`: path to the **work_dir**
+- `--work_dir`: supports two level of folders, usually in the format of \<dataset\>/\<exp_name\>
+- `--feat_path`: path to the extracted pose features
+- `--label_path`: path to the **openasl-v1.0.tsv** provided by OpenASL
+- `--tokenizer` (Optional): path to tokenizer folder, don't need to modify unless you want to use another one
 
 ```bash
 # scripts/openasl/train_ddp.sh
@@ -155,14 +181,18 @@ torchrun --nnodes=1 --nproc_per_node=$GPUS train_openasl_pose_DDP_inter_VN.py \
 ```
 
 ## Miscs
+
 If you plan to run GloFE on other datasets, here are the instructions on how to:
+
 - train the BPE tokenizer
 - filter out the anchor words and generate the files needed for the model
 
 \*Details are now WIP, refer to the notebooks in the `notebooks` folder for now.
 
 ## Citing GloFE
+
 If you find this work useful, please consider giving it a star ⭐ and citing our paper in your work:
+
 ```
 @inproceedings{lin-etal-2023-gloss,
     title = "Gloss-Free End-to-End Sign Language Translation",

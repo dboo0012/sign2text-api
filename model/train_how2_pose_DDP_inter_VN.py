@@ -17,7 +17,8 @@ import time
 
 from torch.nn import functional as F
 from torch.utils.data import Dataset, DataLoader
-from transformers import AutoTokenizer, AdamW, get_linear_schedule_with_warmup
+from transformers import AutoTokenizer, get_linear_schedule_with_warmup
+from torch.optim import AdamW
 from tqdm import tqdm
 from typing import Tuple, Optional, Union
 from tensorboardX import SummaryWriter
@@ -314,7 +315,7 @@ def train(datasets, model, args,
     # Init model
     # model = model.to(device)
     model.train()
-    optimizer = AdamW(model.parameters(), lr=lr, no_deprecation_warning=True)
+    optimizer = AdamW(model.parameters(), lr=lr)
     dataset_train, dataset_dev, dataset_test = datasets
     if args.ngpus > 1:
         sampler = torch.utils.data.distributed.DistributedSampler(
