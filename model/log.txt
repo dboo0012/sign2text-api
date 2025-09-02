@@ -1,0 +1,26 @@
+
+Reading pose file: how2sign\dataset\openpose_output\pkl\fyI1Ev5m1w4_2-8-rgb_front.pkl
+
+
+Reading pose file: how2sign\dataset\openpose_output\pkl\fyI1Ev5m1w4_3-8-rgb_front.pkl
+
+
+Reading pose file: how2sign\dataset\openpose_output\pkl\fyI1Ev5m1w4_4-8-rgb_front.pkl
+
+
+Reading pose file: how2sign\dataset\openpose_output\pkl\fyI1Ev5m1w4_5-8-rgb_front.pkl
+
+
+Reading pose file: how2sign\dataset\openpose_output\pkl\fyI1Ev5m1w4_6-8-rgb_front.pkl
+
+
+Reading pose file: how2sign\dataset\openpose_output\pkl\fyI1Ev5m1w4_7-8-rgb_front.pkl
+
+
+Reading pose file: how2sign\dataset\openpose_output\pkl\fyI1Ev5m1w4_8-8-rgb_front.pkl
+
+
+Reading pose file: how2sign\dataset\openpose_output\pkl\fyI1Ev5m1w4_9-8-rgb_front.pkl
+test-vn: 100%|█████████████████████████████████████████████████████████████████████████| 44/44 [04:42<00:00,  6.41s/it]
+BLEU test >>> B1:14.89, B2:7.09, B3:3.89, B4:2.27
+(glofe) PS C:\Monash\Y3_SEM-2\FYP_2\Alt\Glofe\GloFE-main>
