@@ -35,6 +35,19 @@ class Settings:
         "required_confidence": 0.5
     }
     
+    # Model Configuration
+    MODEL_CONFIG = {
+        "model_dir": os.getenv("MODEL_DIR", "model"),
+        "weights_path": os.getenv("MODEL_WEIGHTS_PATH", "model/how2sign/vn_model/glofe_vn_how2sign_0224.pt"),
+        "tokenizer_path": os.getenv("MODEL_TOKENIZER_PATH", "model/notebooks/how2sign/how2sign-bpe25000-tokenizer-uncased"),
+        "config_path": os.getenv("MODEL_CONFIG_PATH", "model/how2sign/vn_model/exp_config.json"),
+        "clip_length": int(os.getenv("MODEL_CLIP_LENGTH", "16")),
+        "max_gen_tks": int(os.getenv("MODEL_MAX_GEN_TKS", "35")),
+        "num_beams": int(os.getenv("MODEL_NUM_BEAMS", "5")),
+        "buffer_size": int(os.getenv("MODEL_BUFFER_SIZE", "32")),
+        "min_sequence_length": int(os.getenv("MODEL_MIN_SEQUENCE_LENGTH", "16"))
+    }
+    
     # WebSocket Configuration
     WEBSOCKET_PING_INTERVAL = 20  # seconds
     WEBSOCKET_PING_TIMEOUT = 20   # seconds

@@ -7,15 +7,6 @@ API microservice for sign2text backend.
 
 # Running the app
 ```
-# Create a python virtual environment
-python -m venv .venv
-
-# Run the environment
-.venv\Scripts\Activate.ps1
-
-# Validate env running
-Get-Command python
-
 # Installing requirements
 pip install -r requirements.txt
 

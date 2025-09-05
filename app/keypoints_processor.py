@@ -2,13 +2,15 @@
 Keypoints processing module for sign language recognition
 This module handles the core business logic for analyzing keypoints data
 """
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional, Union, List
 from .models import (
     Keypoints, StructuredKeypoints, OpenPoseData, 
     FrameInfo, ProcessingResult
 )
 from .logger import setup_logger
 from .config import settings
+from .model_utils import run_model_inference
+import os
 
 logger = setup_logger(__name__)
 
@@ -27,7 +29,28 @@ class KeypointsProcessor:
         """Initialize the keypoints processor"""
         self.processed_sequences = 0
         self.session_start_time = None
-        logger.info("KeypointsProcessor initialized")
+        
+        # Keypoints buffer for sequence processing
+        self.keypoints_buffer: List[OpenPoseData] = []
+        self.max_buffer_size = 32
+        self.min_sequence_length = 16
+        
+        logger.info("KeypointsProcessor initialized - model will be loaded on demand")
+    
+    def get_processing_stats(self) -> Dict[str, Any]:
+        """
+        Get processing statistics
+        
+        Returns:
+            Dictionary with processing statistics
+        """
+        return {
+            "sequences_processed": self.processed_sequences,
+            "session_start_time": self.session_start_time,
+            "processor_status": "active",
+            "buffer_size": len(self.keypoints_buffer),
+            "min_sequence_length": self.min_sequence_length
+        }
     
     async def process_keypoints(
         self, 
@@ -67,6 +90,14 @@ class KeypointsProcessor:
                     success=False,
                     error=f"Keypoints validation failed: {validation_result['error']}"
                 )
+            
+            # Add to keypoints buffer for sequence processing
+            if isinstance(keypoint_data, OpenPoseData):
+                self.keypoints_buffer.append(keypoint_data)
+                
+                # Keep buffer size manageable
+                if len(self.keypoints_buffer) > self.max_buffer_size:
+                    self.keypoints_buffer.pop(0)
             
             # Core processing logic
             analysis_result = await self._analyze_structured_keypoints(
@@ -216,16 +247,43 @@ class KeypointsProcessor:
         feature_vector = keypoints.to_numpy_features()
         analysis_result["feature_vector_size"] = len(feature_vector)
         
-        # TODO: Add your model inference here
-        # model_prediction = await self.model.predict(feature_vector)
-        # analysis_result["prediction"] = model_prediction
-        
-        # Placeholder analysis
-        analysis_result["model_ready"] = False
-        analysis_result["placeholder_prediction"] = {
-            "predicted_sign": "unknown",
-            "confidence": 0.0
-        }
+        # Model prediction logic
+        if len(self.keypoints_buffer) >= self.min_sequence_length:
+            try:
+                # Use the last sequence for prediction
+                sequence_for_prediction = self.keypoints_buffer[-self.min_sequence_length:]
+                
+                # Call your existing model inference
+                prediction_result = run_model_inference(sequence_for_prediction)
+                
+                analysis_result["prediction"] = prediction_result
+                analysis_result["model_ready"] = True
+                analysis_result["buffer_size"] = len(self.keypoints_buffer)
+                
+                if prediction_result.get("success"):
+                    logger.info(f"Model prediction: {prediction_result.get('text', 'N/A')}")
+                else:
+                    logger.warning(f"Model prediction failed: {prediction_result.get('error', 'Unknown error')}")
+                    
+            except Exception as e:
+                logger.error(f"Model prediction error: {e}")
+                analysis_result["prediction"] = {
+                    "success": False,
+                    "error": f"Model prediction failed: {str(e)}",
+                    "text": ""
+                }
+                analysis_result["model_ready"] = False
+        else:
+            # Insufficient buffer
+            analysis_result["model_ready"] = True
+            analysis_result["buffer_size"] = len(self.keypoints_buffer)
+            analysis_result["prediction"] = {
+                "success": False,
+                "text": "",
+                "confidence": 0.0,
+                "status": "buffering",
+                "frames_needed": self.min_sequence_length - len(self.keypoints_buffer)
+            }
         
         logger.info(f"Processed structured keypoints sequence #{self.processed_sequences}")
         return analysis_result
@@ -290,7 +348,9 @@ class KeypointsProcessor:
         return {
             "sequences_processed": self.processed_sequences,
             "session_start_time": self.session_start_time,
-            "processor_status": "active"
+            "processor_status": "active",
+            "buffer_size": len(self.keypoints_buffer),
+            "min_sequence_length": self.min_sequence_length
         }
     
     def reset_stats(self):
