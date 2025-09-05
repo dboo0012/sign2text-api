@@ -2,17 +2,39 @@
 Model utilities for sign language recognition
 Simple wrapper to call the existing run_inference function
 """
-import torch
 import numpy as np
 import os
-import json
 import sys
 from typing import List, Dict, Any, Optional
 from .models import OpenPoseData
 from .logger import setup_logger
-from run_model_eval import run_inference_with_data
 
 logger = setup_logger(__name__)
+
+def _get_model_function():
+    """
+    Dynamically import the model function with proper path handling
+    This is called only when needed to avoid import errors at module level
+    """
+    try:
+        # Get the absolute path to the model directory
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        base_dir = os.path.dirname(current_dir)
+        model_dir = os.path.join(base_dir, 'model')
+        
+        # Add the model directory to Python path if not already there
+        if model_dir not in sys.path:
+            sys.path.insert(0, model_dir)
+            logger.info(f"Added {model_dir} to Python path")
+        
+        # Now import the function
+        from run_model_eval import run_inference_with_data
+        logger.info("Successfully imported run_inference_with_data function")
+        return run_inference_with_data
+        
+    except ImportError as e:
+        logger.error(f"Failed to import run_inference_with_data: {e}")
+        return None
 
 def convert_openpose_to_numpy(keypoints_sequence: List[OpenPoseData]) -> Optional[np.ndarray]:
     """
@@ -68,6 +90,16 @@ def run_model_inference(keypoints_sequence: List[OpenPoseData]) -> Dict[str, Any
         Dictionary with prediction results
     """
     try:
+        # Get the model function dynamically
+        run_inference_with_data = _get_model_function()
+        if run_inference_with_data is None:
+            return {
+                "success": False,
+                "error": "Model function not available - import failed",
+                "text": "",
+                "frames_processed": 0
+            }
+        
         # Convert OpenPose to numpy format
         joints = convert_openpose_to_numpy(keypoints_sequence)
         if joints is None:
@@ -78,13 +110,7 @@ def run_model_inference(keypoints_sequence: List[OpenPoseData]) -> Dict[str, Any
                 "frames_processed": 0
             }
         
-        # Add model directory to Python path
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        model_dir = os.path.join(base_dir, 'model')
-        
-        if model_dir not in sys.path:
-            sys.path.insert(0, model_dir)
-            logger.info(f"Added {model_dir} to Python path")
+        logger.info(f"Running model inference with joints shape: {joints.shape}")
         
         # Call your model with the keypoints data
         result = run_inference_with_data(joints)

@@ -10,8 +10,6 @@ import json
 from tqdm import tqdm
 import concurrent.futures
 
-
-
 def process_json_file(json_path):
     with open(json_path, 'r') as f:
         data = json.load(f)

@@ -19,3 +19,5 @@ pandas
 tensorboardX
 einops
 urllib3<2
+tqdm
+easydict
