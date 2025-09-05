@@ -8,8 +8,9 @@ import os
 import json
 import sys
 from typing import List, Dict, Any, Optional
-from .models import OpenPoseData, OpenPosePerson
+from .models import OpenPoseData
 from .logger import setup_logger
+from run_model_eval import run_inference_with_data
 
 logger = setup_logger(__name__)
 
@@ -84,9 +85,6 @@ def run_model_inference(keypoints_sequence: List[OpenPoseData]) -> Dict[str, Any
         if model_dir not in sys.path:
             sys.path.insert(0, model_dir)
             logger.info(f"Added {model_dir} to Python path")
-        
-        # Import and call your existing run_inference function
-        from run_model_eval import run_inference_with_data
         
         # Call your model with the keypoints data
         result = run_inference_with_data(joints)
