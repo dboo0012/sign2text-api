@@ -14,7 +14,7 @@ class FrameInfo(BaseModel):
     has_left_hand: bool
     has_right_hand: bool
 
-# Keypoint data types based on OpenPose/MediaPipe format
+# Keypoint data types based on OpenPose format
 class Point2D(BaseModel):
     """2D coordinate point"""
     x: float
@@ -246,6 +246,21 @@ class KeypointsInputMessage(WebSocketMessage):
             raise ValueError("keypoints data must be provided")
         return v
 
+class FrameMessage(WebSocketMessage):
+    """Message containing frame image data"""
+    type: str = "frame"
+    data: List[int] = Field(description="Frame image data as byte array")
+    format: str = Field(default="jpeg", description="Image format (jpeg, png, etc.)")
+    width: Optional[int] = Field(default=None, description="Frame width")
+    height: Optional[int] = Field(default=None, description="Frame height")
+    
+    @validator('data')
+    def validate_data(cls, v):
+        """Ensure frame data is provided"""
+        if not v:
+            raise ValueError("Frame data must be provided")
+        return v
+
 class PingMessage(WebSocketMessage):
     """Ping message for connection health check"""
     type: str = "ping"
@@ -269,7 +284,6 @@ class ErrorMessage(WebSocketMessage):
 class HealthResponse(BaseModel):
     """Health check response"""
     status: str
-    mediapipe_available: bool
     active_connections: int
     version: str
     timestamp: datetime = Field(default_factory=datetime.now)

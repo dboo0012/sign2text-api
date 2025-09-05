@@ -22,9 +22,6 @@ This directory contains the test suite for the sign2text API using pytest.
    # Fast unit tests only
    pytest -v -m "not slow"
 
-   # MediaPipe tests only
-   pytest -v -m "mediapipe"
-
    # WebSocket tests only
    pytest -v -m "websocket"
 
@@ -34,7 +31,6 @@ This directory contains the test suite for the sign2text API using pytest.
 
 ## Test Structure
 
-- **`test_mediapipe_pytest.py`** - MediaPipe functionality tests
 - **`test_websocket.py`** - WebSocket connection and message handling tests
 - **`conftest.py`** - Shared fixtures and pytest configuration
 - **`__init__.py`** - Makes test directory a Python package
@@ -46,7 +42,6 @@ Tests are organized with markers:
 - `@pytest.mark.unit` - Fast unit tests
 - `@pytest.mark.integration` - Integration tests
 - `@pytest.mark.slow` - Slow-running tests
-- `@pytest.mark.mediapipe` - Tests requiring MediaPipe
 - `@pytest.mark.websocket` - WebSocket-related tests
 
 ## Running Tests
@@ -61,10 +56,10 @@ pytest
 pytest -v
 
 # Run specific test file
-pytest test/test_mediapipe_pytest.py
+pytest test/test_websocket.py
 
 # Run specific test function
-pytest test/test_mediapipe_pytest.py::TestPoseProcessor::test_processor_initialization
+pytest test/test_websocket.py::TestWebSocketHandler::test_handler_initialization
 ```
 
 ### Advanced Options
@@ -72,9 +67,6 @@ pytest test/test_mediapipe_pytest.py::TestPoseProcessor::test_processor_initiali
 ```bash
 # Skip slow tests
 pytest -m "not slow"
-
-# Run only MediaPipe tests
-pytest -m "mediapipe"
 
 # Run with coverage
 pytest --cov=app --cov-report=html
@@ -91,8 +83,6 @@ pytest -l
 
 ## Test Requirements
 
-- **OpenCV**: `pip install opencv-python`
-- **MediaPipe**: `pip install mediapipe`
 - **pytest**: `pip install pytest`
 - **pytest-asyncio**: For async test support
 - **pytest-mock**: For mocking capabilities
@@ -116,15 +106,11 @@ def test_my_function():
 
 ## Fixtures Available
 
-- `test_frame` - Pre-created test image frame
 - `mock_websocket` - Mock WebSocket for testing
-- `connection_manager` - Fresh ConnectionManager instance
-- `websocket_handler` - WebSocketHandler with manager
-- `pose_processor` - MediaPipe processor instance
+- `websocket_handler` - WebSocketHandler instance
+- `sample_keypoints` - Sample keypoints data for testing
 
 ## Troubleshooting
-
-**MediaPipe tests failing**: Install MediaPipe with `pip install mediapipe`
 
 **Import errors**: Ensure you're running from the project root directory
 

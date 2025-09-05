@@ -3,9 +3,12 @@ Simplified WebSocket handler for single connection processing using FastAPI buil
 """
 from fastapi import WebSocket, WebSocketDisconnect, HTTPException
 from .logger import setup_logger
-from .models import KeypointsInputMessage, PingMessage, ProcessingResponseMessage, PongMessage, ErrorMessage, ProcessingResult
+from .models import KeypointsInputMessage, PingMessage, FrameMessage, ProcessingResponseMessage, PongMessage, ErrorMessage, ProcessingResult
 from .keypoints_processor import KeypointsProcessor
 import time
+import json
+import numpy as np
+import cv2
 from typing import Optional, Union
 from pydantic import ValidationError
 
@@ -88,6 +91,10 @@ class WebSocketHandler:
                 # Validate using Pydantic model
                 ping_msg = PingMessage(**message_data)
                 await self._handle_ping(ping_msg)
+            elif msg_type == 'frame':
+                # Validate using Pydantic model
+                frame_msg = FrameMessage(**message_data)
+                await self._handle_frame_input(frame_msg)
             else:
                 await self._send_error(f"Unknown message type: {msg_type}")
                 
@@ -137,6 +144,52 @@ class WebSocketHandler:
         except Exception as e:
             logger.error(f"Error processing keypoints for sequence {message.sequence_id}: {e}")
             await self._send_error(f"Keypoints processing error for {message.sequence_id}: {str(e)}")
+
+    async def _handle_frame_input(self, message: FrameMessage):
+        """
+        Handle frame input message using validated Pydantic model
+        
+        Args:
+            message: Validated FrameMessage model containing frame data
+        """
+        try:
+            logger.info(f"📷 Received frame ({message.format})")
+            
+            # Convert the list of integers back to bytes
+            frame_bytes = bytes(message.data)
+            
+            # Decode the frame using OpenCV
+            np_arr = np.frombuffer(frame_bytes, dtype=np.uint8)
+            frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            
+            if frame is not None:
+                height, width = frame.shape[:2]
+                # logger.info(f"📷 Decoded frame successfully: {width}x{height} ({message.format})")
+                
+                # Save frame (overwrites latest.jpg each time)
+                cv2.imwrite("latest.jpg", frame)
+                
+                # Create successful response
+                response = ProcessingResponseMessage(
+                    timestamp=message.timestamp,
+                    success=True,
+                    message=f"Frame processed successfully: {width}x{height}",
+                    processed_data={
+                        "frame_width": width,
+                        "frame_height": height,
+                        "format": message.format,
+                        "saved_as": "latest.jpg"
+                    }
+                )
+                await self._send_json_response(response)
+                
+            else:
+                logger.warning("⚠️ Failed to decode frame")
+                await self._send_error("Failed to decode frame image")
+                
+        except Exception as e:
+            logger.error(f"Error processing frame: {e}")
+            await self._send_error(f"Frame processing error: {str(e)}")
 
     async def _handle_ping(self, message: PingMessage):
         """

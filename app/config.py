@@ -10,7 +10,7 @@ class Settings:
     # API Configuration
     API_TITLE = "sign2text API"
     API_VERSION = "1.0.0"
-    API_DESCRIPTION = "Real-time sign language recognition using MediaPipe and WebSocket"
+    API_DESCRIPTION = "Real-time sign language recognition using WebSocket"
     
     # Server Configuration
     HOST = os.getenv("HOST", "0.0.0.0")
