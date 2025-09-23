@@ -32,8 +32,8 @@ class KeypointsProcessor:
         
         # Keypoints buffer for sequence processing
         self.keypoints_buffer: List[OpenPoseData] = []
-        self.max_buffer_size = 32
-        self.min_sequence_length = 16
+        self.max_buffer_size = 512
+        self.min_sequence_length = 32
         
         logger.info("KeypointsProcessor initialized - model will be loaded on demand")
     

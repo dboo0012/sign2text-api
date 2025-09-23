@@ -63,7 +63,7 @@ def run_inference_with_data(joints_data):
         'bs': 1,
         'local_rank': 0,
         'ngpus': 1,
-        'clip_length': 16,
+        'clip_length': 512,
         'prefix_dim': 2048,
         'eos_token': '.',
         'tokenizer': tokenizer_path,
@@ -262,7 +262,7 @@ def run_inference(input_data):
         'bs': 1,  # batch size for single inference
         'local_rank': 0,
         'ngpus': 1,
-        'clip_length': 16,
+        'clip_length': 512,
         'prefix_dim': 2048,
         'eos_token': '.',
         'tokenizer': tokenizer_path,
