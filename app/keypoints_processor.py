@@ -16,7 +16,7 @@ logger = setup_logger(__name__)
 
 class KeypointsProcessor:
     """
-    Core processor for analyzing keypoints data from client-side MediaPipe extraction
+    Core processor for analyzing keypoints data from client-side keypoints extraction
     
     This class contains the main business logic for:
     - Sign language recognition

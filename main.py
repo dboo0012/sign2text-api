@@ -42,7 +42,6 @@ async def health():
     connection_stats = ws_handler.get_connection_stats()
     return {
         "status": "healthy",
-        "mediapipe_available": True,
         "connection_active": connection_stats["connected"],
         "messages_processed": connection_stats["messages_processed"],
         "version": settings.API_VERSION
