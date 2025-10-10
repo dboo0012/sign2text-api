@@ -167,7 +167,14 @@ class WebSocketHandler:
                 # logger.info(f"📷 Decoded frame successfully: {width}x{height} ({message.format})")
                 
                 # Save frame (overwrites latest.jpg each time)
+                # UPDATE_THIS_CODE
                 cv2.imwrite("latest.jpg", frame)
+                
+                # Handle when video is paused, should also pause keypoints processing on backend
+                ## CALL PYOPENPOSE, feed frame into library, pyopenpose returns keypoints, pass keypoint to model
+                # Warn: Consecutive calling of pyopenpose can have perf issues, try async or non blocking 
+                # Warn: Sending the frames to model should consider order? And also watch out for model inference delay
+                # 
                 
                 # Create successful response
                 response = ProcessingResponseMessage(
