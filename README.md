@@ -7,6 +7,11 @@ API microservice for sign2text backend.
 1. Python
 2. pip
 
+# Running the server using Docker
+
+- sudo docker build -t sign2text-backend .
+- sudo docker run --gpus all -p 8000:8000 --name sign2text-backend-container sign2text-backend
+
 # Running the app
 
 Install NVCC and pytorch:
