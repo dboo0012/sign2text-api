@@ -177,9 +177,7 @@ class WebSocketHandler:
         Args:
             message: Validated FrameMessage model containing frame data
         """
-        try:
-            logger.info(f"📷 Received frame ({message.format})")
-            
+        try:            
             # Convert the list of integers back to bytes
             frame_bytes = bytes(message.data)
             
@@ -196,7 +194,7 @@ class WebSocketHandler:
             self.frames_processed += 1
             
             # Save frame for debugging (overwrites latest.jpg each time)
-            cv2.imwrite("latest.jpg", frame)
+            # cv2.imwrite("latest.jpg", frame)
             
             # Check if OpenPose is available
             if not self.openpose_extractor or not self.openpose_extractor.is_initialized:
@@ -243,42 +241,39 @@ class WebSocketHandler:
             # If people detected, get structured keypoints for the first person
             keypoints_summary = None
             keypoints_dict = None
-            if num_people > 0:
-                person = extracted_keypoints.people[0]
-                structured_keypoints = StructuredKeypoints.from_openpose_person(person)
-                keypoints_summary = structured_keypoints.get_detection_summary()
-                
-                # Convert OpenPose data to dictionary for sending
-                keypoints_dict = extracted_keypoints.model_dump()
-                
-                # Log keypoints processed
-                logger.info(f"🔍 Keypoints processed - "
-                          f"Pose: {keypoints_summary['pose_points']}, "
-                          f"Face: {keypoints_summary['face_points']}, "
-                          f"Left Hand: {keypoints_summary['left_hand_points']}, "
-                          f"Right Hand: {keypoints_summary['right_hand_points']}")
-                
-                # TODO: Send keypoints to the model for inference
-                # Note: Consider implementing a buffer/queue for sequential frame processing
-                # to handle model inference delay and maintain temporal order
+            model_result = None
             
-            # Create successful response with extracted keypoints
-            response = ProcessingResponseMessage(
-                timestamp=message.timestamp,
-                success=True,
-                message=f"Frame processed with keypoint extraction: {width}x{height}",
-                processed_data={
-                    "frame_width": width,
-                    "frame_height": height,
-                    "format": message.format,
-                    "people_detected": num_people,
-                    "keypoints_extracted": True,
-                    "keypoints_summary": keypoints_summary,
-                    "keypoints": keypoints_dict,  # Full OpenPose keypoints data
-                    "frame_number": self.frames_processed
-                }
-            )
-            await self._send_json_response(response)
+            # if num_people > 0:
+            person = extracted_keypoints.people[0]
+            
+            # Convert OpenPose data to dictionary for sending
+            keypoints_dict = extracted_keypoints.model_dump()
+            
+            # Send raw keypoints to the model for inference via keypoints processor
+            # The processor will buffer frames and run inference when enough frames are collected
+            if self.keypoints_processor:
+                logger.info(f"Passing keypoint into Keypoint processor {extracted_keypoints.people[0]}")
+
+                result = await self.keypoints_processor.process_keypoints(
+                    keypoint_data=extracted_keypoints.people[0],  # Pass raw OpenPoseData
+                    frame_info=None,
+                    timestamp=message.timestamp
+                )
+
+                # Create and send response using Pydantic model
+                response_data = result.analysis_result if result.success else None
+                if response_data:
+                    # Add sequence_id to the response for correlation
+                    response_data["sequence_id"] = message.sequence_id
+                    response_data["format"] = message.format
+                
+                response = ProcessingResponseMessage(
+                    timestamp=message.timestamp,
+                    success=result.success,
+                    message=result.error if not result.success else f"Sequence {message.sequence_id} processed successfully",
+                    processed_data=response_data
+                )
+                await self._send_json_response(response)
                 
         except Exception as e:
             logger.error(f"Error processing frame: {e}")

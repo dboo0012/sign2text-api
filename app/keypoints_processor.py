@@ -1,3 +1,61 @@
+# class KeypointsProcessor:
+#     def __init__(self):
+#         # ...existing code...
+#         self.keypoints_buffer: List[OpenPoseData] = []
+#         self.buffer_update_interval = 5  # Only update buffer every 5 frames
+#         self.frames_since_update = 0
+#         # ...existing code...
+
+#     async def process_keypoints(
+#         self, 
+#         keypoint_data: Union[Keypoints, StructuredKeypoints, OpenPoseData, Dict[str, Any]], 
+#         frame_info: Optional[FrameInfo] = None,
+#         timestamp: Optional[float] = None
+#     ) -> ProcessingResult:
+#         """Process keypoints with batching optimization"""
+#         try:
+#             self.processed_sequences += 1
+            
+#             # Add to buffer
+#             if isinstance(keypoint_data, OpenPoseData):
+#                 self.keypoints_buffer.append(keypoint_data)
+#                 self.frames_since_update += 1
+                
+#                 # Keep buffer size manageable
+#                 if len(self.keypoints_buffer) > self.max_buffer_size:
+#                     self.keypoints_buffer.pop(0)
+                
+#                 # Only run model inference periodically
+#                 if self.frames_since_update >= self.buffer_update_interval and \
+#                    len(self.keypoints_buffer) >= self.min_sequence_length:
+#                     self.frames_since_update = 0
+                    
+#                     # Run model inference
+#                     prediction_result = run_model_inference(
+#                         self.keypoints_buffer[-self.min_sequence_length:]
+#                     )
+                    
+#                     return ProcessingResult(
+#                         success=True,
+#                         analysis_result={
+#                             "prediction": prediction_result,
+#                             "buffer_size": len(self.keypoints_buffer)
+#                         }
+#                     )
+            
+#             # Return basic acknowledgment without running model
+#             return ProcessingResult(
+#                 success=True,
+#                 analysis_result={
+#                     "buffered": True,
+#                     "buffer_size": len(self.keypoints_buffer),
+#                     "frames_until_inference": self.buffer_update_interval - self.frames_since_update
+#                 }
+#             )
+            
+#         except Exception as e:
+#             logger.error(f"Error in process_keypoints: {e}")
+#             return ProcessingResult(success=False, error=str(e))
 """
 Keypoints processing module for sign language recognition
 This module handles the core business logic for analyzing keypoints data
