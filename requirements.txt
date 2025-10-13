@@ -13,7 +13,7 @@ httpx
 # Model dependencies
 torch
 transformers
-numpy
+numpy>=1.21.0
 opencv-python
 pandas
 tensorboardX
