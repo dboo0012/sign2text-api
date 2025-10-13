@@ -76,20 +76,30 @@ class OpenPoseExtractor:
             
             # Check if any people were detected
             if datum.poseKeypoints is None or len(datum.poseKeypoints) == 0:
-                logger.debug("⚠️ No people detected in frame")
                 return OpenPoseData(version=1.3, people=[])
+
+            # TO DO: Remove debug logs in production
+            logger.info("✓ Extracted keypoints: " + str(datum.poseKeypoints.shape))
             
-            # Return keypoints directly from datum
-            logger.info("✓ Extracted keypoints: " + str(d.poseKeypoints.shape))
+            # Optimize: Only flatten and convert to list when necessary
+            # Pre-check arrays exist before processing
+            pose_kp = datum.poseKeypoints[0].flatten().tolist() if datum.poseKeypoints is not None and len(datum.poseKeypoints) > 0 else []
+            face_kp = datum.faceKeypoints[0].flatten().tolist() if datum.faceKeypoints is not None and len(datum.faceKeypoints) > 0 else []
+            hand_left_kp = datum.handKeypoints[0][0].flatten().tolist() if datum.handKeypoints is not None and len(datum.handKeypoints) > 0 else []
+            hand_right_kp = datum.handKeypoints[1][0].flatten().tolist() if datum.handKeypoints is not None and len(datum.handKeypoints) > 1 else []
             
             return OpenPoseData(
                 version=1.3, 
                 people=[OpenPosePerson(
                     person_id=[0],
-                    pose_keypoints_2d=datum.poseKeypoints[0].flatten().tolist() if datum.poseKeypoints is not None else [],
-                    face_keypoints_2d=datum.faceKeypoints[0].flatten().tolist() if datum.faceKeypoints is not None and len(datum.faceKeypoints) > 0 else [],
-                    hand_left_keypoints_2d=datum.handKeypoints[0][0].flatten().tolist() if datum.handKeypoints is not None and len(datum.handKeypoints) > 0 else [],
-                    hand_right_keypoints_2d=datum.handKeypoints[1][0].flatten().tolist() if datum.handKeypoints is not None and len(datum.handKeypoints) > 1 else [],
+                    pose_keypoints_2d=pose_kp,
+                    face_keypoints_2d=face_kp,
+                    hand_left_keypoints_2d=hand_left_kp,
+                    hand_right_keypoints_2d=hand_right_kp,
+                    pose_keypoints_3d=[],
+                    face_keypoints_3d=[],
+                    hand_left_keypoints_3d=[],
+                    hand_right_keypoints_3d=[]
                 )]
             )
             

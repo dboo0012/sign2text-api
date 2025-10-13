@@ -5,7 +5,7 @@ from fastapi import WebSocket, WebSocketDisconnect, HTTPException
 from .logger import setup_logger
 from .models import KeypointsInputMessage, PingMessage, FrameMessage, ProcessingResponseMessage, PongMessage, ErrorMessage, ProcessingResult, StructuredKeypoints
 from .keypoints_processor import KeypointsProcessor
-from .openpose_extractor import OpenPoseExtractor
+from .openpose import OpenPoseExtractor
 import time
 import json
 import numpy as np
@@ -217,9 +217,9 @@ class WebSocketHandler:
                 return
             
             # Extract keypoints from the frame
-            openpose_data = self.openpose_extractor.extract_keypoints(frame)
+            extracted_keypoints = self.openpose_extractor.extract_keypoints(frame)
             
-            if openpose_data is None:
+            if extracted_keypoints is None:
                 logger.warning("⚠️ Failed to extract keypoints from frame")
                 response = ProcessingResponseMessage(
                     timestamp=message.timestamp,
@@ -237,19 +237,19 @@ class WebSocketHandler:
                 return
             
             # Process extracted keypoints
-            num_people = len(openpose_data.people)
+            num_people = len(extracted_keypoints.people)
             logger.info(f"✓ Extracted keypoints for {num_people} person(s)")
             
             # If people detected, get structured keypoints for the first person
             keypoints_summary = None
             keypoints_dict = None
             if num_people > 0:
-                person = openpose_data.people[0]
+                person = extracted_keypoints.people[0]
                 structured_keypoints = StructuredKeypoints.from_openpose_person(person)
                 keypoints_summary = structured_keypoints.get_detection_summary()
                 
                 # Convert OpenPose data to dictionary for sending
-                keypoints_dict = openpose_data.model_dump()
+                keypoints_dict = extracted_keypoints.model_dump()
                 
                 # Log keypoints processed
                 logger.info(f"🔍 Keypoints processed - "
