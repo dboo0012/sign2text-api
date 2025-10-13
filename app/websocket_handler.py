@@ -3,8 +3,9 @@ Simplified WebSocket handler for single connection processing using FastAPI buil
 """
 from fastapi import WebSocket, WebSocketDisconnect, HTTPException
 from .logger import setup_logger
-from .models import KeypointsInputMessage, PingMessage, FrameMessage, ProcessingResponseMessage, PongMessage, ErrorMessage, ProcessingResult
+from .models import KeypointsInputMessage, PingMessage, FrameMessage, ProcessingResponseMessage, PongMessage, ErrorMessage, ProcessingResult, StructuredKeypoints
 from .keypoints_processor import KeypointsProcessor
+from .openpose_extractor import OpenPoseExtractor
 import time
 import json
 import numpy as np
@@ -21,8 +22,10 @@ class WebSocketHandler:
         """Initialize the handler with no active connection"""
         self.current_websocket: Optional[WebSocket] = None
         self.keypoints_processor: Optional[KeypointsProcessor] = None
+        self.openpose_extractor: Optional[OpenPoseExtractor] = None
         self.connected_at: Optional[float] = None
         self.messages_processed: int = 0
+        self.frames_processed: int = 0
         logger.info("WebSocket handler initialized for single connection")
 
     async def handle_connection(self, websocket: WebSocket):
@@ -39,14 +42,33 @@ class WebSocketHandler:
             return
 
         try:
-            # Accept the connection
+            # Accept the connection first
             await websocket.accept()
             self.current_websocket = websocket
-            self.keypoints_processor = KeypointsProcessor()
             self.connected_at = time.time()
             self.messages_processed = 0
+            self.frames_processed = 0
             
             logger.info("WebSocket connection established")
+            
+            # Initialize processors (non-blocking)
+            try:
+                self.keypoints_processor = KeypointsProcessor()
+                logger.info("✓ Keypoints processor initialized")
+            except Exception as e:
+                logger.warning(f"⚠️ Keypoints processor initialization failed: {e}")
+                self.keypoints_processor = None
+            
+            # Initialize OpenPose (can be slow, but shouldn't block connection)
+            try:
+                self.openpose_extractor = OpenPoseExtractor()
+                if self.openpose_extractor.is_initialized:
+                    logger.info("✓ OpenPose extractor ready for keypoint extraction")
+                else:
+                    logger.warning("⚠️ OpenPose extractor not available - will accept frames but not extract keypoints")
+            except Exception as e:
+                logger.warning(f"⚠️ OpenPose extractor initialization failed: {e}")
+                self.openpose_extractor = None
             
             # Handle messages until disconnection
             while True:
@@ -64,12 +86,14 @@ class WebSocketHandler:
     def _cleanup_connection(self):
         """Clean up the current connection and associated resources"""
         if self.current_websocket:
-            logger.info(f"Connection cleanup - processed {self.messages_processed} messages")
+            logger.info(f"Connection cleanup - processed {self.messages_processed} messages, {self.frames_processed} frames")
         
         self.current_websocket = None
         self.keypoints_processor = None
+        self.openpose_extractor = None
         self.connected_at = None
         self.messages_processed = 0
+        self.frames_processed = 0
 
     async def _process_message(self, message_data: dict):
         """
@@ -148,6 +172,7 @@ class WebSocketHandler:
     async def _handle_frame_input(self, message: FrameMessage):
         """
         Handle frame input message using validated Pydantic model
+        Extract keypoints using OpenPose and process them
         
         Args:
             message: Validated FrameMessage model containing frame data
@@ -162,37 +187,98 @@ class WebSocketHandler:
             np_arr = np.frombuffer(frame_bytes, dtype=np.uint8)
             frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
             
-            if frame is not None:
-                height, width = frame.shape[:2]
-                # logger.info(f"📷 Decoded frame successfully: {width}x{height} ({message.format})")
-                
-                # Save frame (overwrites latest.jpg each time)
-                # UPDATE_THIS_CODE
-                cv2.imwrite("latest.jpg", frame)
-                
-                # Handle when video is paused, should also pause keypoints processing on backend
-                ## CALL PYOPENPOSE, feed frame into library, pyopenpose returns keypoints, pass keypoint to model
-                # Warn: Consecutive calling of pyopenpose can have perf issues, try async or non blocking 
-                # Warn: Sending the frames to model should consider order? And also watch out for model inference delay
-                # 
-                
-                # Create successful response
+            if frame is None:
+                logger.warning("⚠️ Failed to decode frame")
+                await self._send_error("Failed to decode frame image")
+                return
+            
+            height, width = frame.shape[:2]
+            self.frames_processed += 1
+            
+            # Save frame for debugging (overwrites latest.jpg each time)
+            cv2.imwrite("latest.jpg", frame)
+            
+            # Check if OpenPose is available
+            if not self.openpose_extractor or not self.openpose_extractor.is_initialized:
+                logger.debug("⚠️ OpenPose extractor not available - skipping keypoint extraction")
                 response = ProcessingResponseMessage(
                     timestamp=message.timestamp,
                     success=True,
-                    message=f"Frame processed successfully: {width}x{height}",
+                    message=f"Frame received (OpenPose not available): {width}x{height}",
                     processed_data={
                         "frame_width": width,
                         "frame_height": height,
                         "format": message.format,
-                        "saved_as": "latest.jpg"
+                        "openpose_available": False,
+                        "frame_number": self.frames_processed
                     }
                 )
                 await self._send_json_response(response)
+                return
+            
+            # Extract keypoints from the frame
+            openpose_data = self.openpose_extractor.extract_keypoints(frame)
+            
+            if openpose_data is None:
+                logger.warning("⚠️ Failed to extract keypoints from frame")
+                response = ProcessingResponseMessage(
+                    timestamp=message.timestamp,
+                    success=True,
+                    message=f"Frame received but no keypoints detected: {width}x{height}",
+                    processed_data={
+                        "frame_width": width,
+                        "frame_height": height,
+                        "format": message.format,
+                        "people_detected": 0,
+                        "keypoints_extracted": False
+                    }
+                )
+                await self._send_json_response(response)
+                return
+            
+            # Process extracted keypoints
+            num_people = len(openpose_data.people)
+            logger.info(f"✓ Extracted keypoints for {num_people} person(s)")
+            
+            # If people detected, get structured keypoints for the first person
+            keypoints_summary = None
+            keypoints_dict = None
+            if num_people > 0:
+                person = openpose_data.people[0]
+                structured_keypoints = StructuredKeypoints.from_openpose_person(person)
+                keypoints_summary = structured_keypoints.get_detection_summary()
                 
-            else:
-                logger.warning("⚠️ Failed to decode frame")
-                await self._send_error("Failed to decode frame image")
+                # Convert OpenPose data to dictionary for sending
+                keypoints_dict = openpose_data.model_dump()
+                
+                # Log keypoints processed
+                logger.info(f"🔍 Keypoints processed - "
+                          f"Pose: {keypoints_summary['pose_points']}, "
+                          f"Face: {keypoints_summary['face_points']}, "
+                          f"Left Hand: {keypoints_summary['left_hand_points']}, "
+                          f"Right Hand: {keypoints_summary['right_hand_points']}")
+                
+                # TODO: Send keypoints to the model for inference
+                # Note: Consider implementing a buffer/queue for sequential frame processing
+                # to handle model inference delay and maintain temporal order
+            
+            # Create successful response with extracted keypoints
+            response = ProcessingResponseMessage(
+                timestamp=message.timestamp,
+                success=True,
+                message=f"Frame processed with keypoint extraction: {width}x{height}",
+                processed_data={
+                    "frame_width": width,
+                    "frame_height": height,
+                    "format": message.format,
+                    "people_detected": num_people,
+                    "keypoints_extracted": True,
+                    "keypoints_summary": keypoints_summary,
+                    "keypoints": keypoints_dict,  # Full OpenPose keypoints data
+                    "frame_number": self.frames_processed
+                }
+            )
+            await self._send_json_response(response)
                 
         except Exception as e:
             logger.error(f"Error processing frame: {e}")
@@ -252,6 +338,7 @@ class WebSocketHandler:
             'connected': self.current_websocket is not None,
             'connected_at': self.connected_at,
             'messages_processed': self.messages_processed,
+            'frames_processed': self.frames_processed,
             'uptime_seconds': time.time() - self.connected_at if self.connected_at else 0
         }
         
@@ -259,5 +346,10 @@ class WebSocketHandler:
         if self.keypoints_processor:
             processor_stats = self.keypoints_processor.get_processing_stats()
             stats['keypoints_processing'] = processor_stats
+        
+        # Add OpenPose extractor stats if available
+        if self.openpose_extractor:
+            openpose_stats = self.openpose_extractor.get_stats()
+            stats['openpose_extractor'] = openpose_stats
             
         return stats

@@ -35,6 +35,18 @@ class Settings:
         "required_confidence": 0.5
     }
     
+    # OpenPose Configuration
+    OPENPOSE_CONFIG = {
+        "model_folder": os.getenv("OPENPOSE_MODEL_FOLDER", "/openpose/models/"),
+        "model_pose":"BODY_25",
+        "face": True,
+        "hand": True,
+        "body": 1,
+        "number_people_max": 1,
+        "net_resolution": "-1x368",
+        # "hand_net_resolution": os.getenv("OPENPOSE_HAND_NET_RESOLUTION", "368x368"),
+    }
+    
     # Model Configuration
     MODEL_CONFIG = {
         "model_dir": os.getenv("MODEL_DIR", "model"),
