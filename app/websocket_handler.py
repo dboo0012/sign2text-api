@@ -258,7 +258,7 @@ class WebSocketHandler:
                 # Create and send response using Pydantic model
                 response_data = result.analysis_result if result.success else None
                 # logger.info(f"Returned result: {result}")
-                logger.info(f"SENDING RESULTS (response_data): {response_data}")
+                # logger.info(f"SENDING RESULTS (response_data): {response_data}")
                 
                 if response_data:
                     # Add sequence_id for correlation (using frames_processed as sequence)

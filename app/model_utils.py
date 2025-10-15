@@ -36,12 +36,12 @@ def _get_model_function():
         logger.error(f"Failed to import run_inference_with_data: {e}")
         return None
 
-def convert_openpose_to_numpy(keypoints_sequence: List[OpenPoseData]) -> Optional[np.ndarray]:
+def convert_openpose_to_numpy(keypoints_sequence: List[Dict[str, Any]]) -> Optional[np.ndarray]:
     """
     Convert OpenPose sequence to numpy array format expected by your model
     
     Args:
-        keypoints_sequence: List of OpenPose frames
+        keypoints_sequence: List of OpenPose frames as dicts
         
     Returns:
         Numpy array in format (Time, Vertices, Channels) or None if conversion fails
@@ -50,13 +50,15 @@ def convert_openpose_to_numpy(keypoints_sequence: List[OpenPoseData]) -> Optiona
         frame_data = []
         
         for frame in keypoints_sequence:
-            if frame.people:
-                person = frame.people[0]  # Use first person
+            # Access dict keys instead of attributes
+            people = frame.get('people', [])
+            if people:
+                person = people[0]  # Use first person
                 
                 # Extract keypoints in the exact same order as your model expects
                 pose_data = []
                 for key in ['pose_keypoints_2d', 'hand_left_keypoints_2d', 'hand_right_keypoints_2d', 'face_keypoints_2d']:
-                    keypoints = getattr(person, key, [])
+                    keypoints = person.get(key, [])
                     if keypoints:
                         pose_data.extend(keypoints)
                 
@@ -77,20 +79,23 @@ def convert_openpose_to_numpy(keypoints_sequence: List[OpenPoseData]) -> Optiona
         
     except Exception as e:
         logger.error(f"Error converting OpenPose to numpy: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         return None
 
-def run_model_inference(keypoints_sequence: List[OpenPoseData]) -> Dict[str, Any]:
+def run_model_inference(keypoints_sequence: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
     Run inference using the existing model by passing keypoints data directly
     
     Args:
-        keypoints_sequence: List of OpenPose frames
+        keypoints_sequence: List of OpenPose frames as dicts
         
     Returns:
         Dictionary with prediction results
     """
     try:
         # Get the model function dynamically
+        logger.info("START model inference")
         run_inference_with_data = _get_model_function()
         if run_inference_with_data is None:
             return {
