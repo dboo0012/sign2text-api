@@ -270,6 +270,7 @@ class ProcessingResponseMessage(WebSocketMessage):
     type: str = "success"
     success: bool
     message: Optional[str] = None
+    prediction: Optional[Dict[str, Any]] = Field(default=None, description="Prediction results from the model")
     processed_data: Optional[Dict[str, Any]] = Field(default=None, description="Any processed results")
 
 class PongMessage(WebSocketMessage):

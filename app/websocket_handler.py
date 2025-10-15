@@ -161,6 +161,7 @@ class WebSocketHandler:
                 timestamp=message.timestamp,
                 success=result.success,
                 message=result.error if not result.success else f"Sequence {message.sequence_id} processed successfully",
+                prediction=response_data.get('prediction') if response_data else None,
                 processed_data=response_data
             )
             await self._send_json_response(response)
@@ -203,6 +204,7 @@ class WebSocketHandler:
                     timestamp=message.timestamp,
                     success=True,
                     message=f"Frame received (OpenPose not available): {width}x{height}",
+                    prediction=None,
                     processed_data={
                         "frame_width": width,
                         "frame_height": height,
@@ -223,6 +225,7 @@ class WebSocketHandler:
                     timestamp=message.timestamp,
                     success=True,
                     message=f"Frame received but no keypoints detected: {width}x{height}",
+                    prediction=None,
                     processed_data={
                         "frame_width": width,
                         "frame_height": height,
@@ -238,41 +241,38 @@ class WebSocketHandler:
             num_people = len(extracted_keypoints.people)
             logger.info(f"✓ Extracted keypoints for {num_people} person(s)")
             
-            # If people detected, get structured keypoints for the first person
-            keypoints_summary = None
-            keypoints_dict = None
-            model_result = None
-            
             # if num_people > 0:
             person = extracted_keypoints.people[0]
-            
-            # Convert OpenPose data to dictionary for sending
-            keypoints_dict = extracted_keypoints.model_dump()
             
             # Send raw keypoints to the model for inference via keypoints processor
             # The processor will buffer frames and run inference when enough frames are collected
             if self.keypoints_processor:
-                logger.info(f"Passing keypoint into Keypoint processor {extracted_keypoints.people[0]}")
+                # logger.info(f"Passing keypoint into Keypoint processor == {extracted_keypoints.model_dump()}")
 
                 result = await self.keypoints_processor.process_keypoints(
-                    keypoint_data=extracted_keypoints.people[0],  # Pass raw OpenPoseData
+                    keypoint_data=extracted_keypoints.model_dump(),  # Pass raw OpenPoseData
                     frame_info=None,
                     timestamp=message.timestamp
                 )
 
                 # Create and send response using Pydantic model
                 response_data = result.analysis_result if result.success else None
+                # logger.info(f"Returned result: {result}")
+                logger.info(f"SENDING RESULTS (response_data): {response_data}")
+                
                 if response_data:
-                    # Add sequence_id to the response for correlation
-                    response_data["sequence_id"] = message.sequence_id
+                    # Add sequence_id for correlation (using frames_processed as sequence)
+                    response_data["sequence_id"] = self.frames_processed
                     response_data["format"] = message.format
                 
                 response = ProcessingResponseMessage(
                     timestamp=message.timestamp,
-                    success=result.success,
-                    message=result.error if not result.success else f"Sequence {message.sequence_id} processed successfully",
+                    success=result.success,  # Overall processing success
+                    message=result.error if not result.success else f"Sequence {self.frames_processed} processed",
+                    prediction=response_data.get('prediction') if response_data else None,
                     processed_data=response_data
                 )
+                logger.info(f"Response to ws: {response}")
                 await self._send_json_response(response)
                 
         except Exception as e:

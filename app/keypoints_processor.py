@@ -69,6 +69,7 @@ from .logger import setup_logger
 from .config import settings
 from .model_utils import run_model_inference
 import os
+import warnings
 
 logger = setup_logger(__name__)
 
@@ -85,6 +86,7 @@ class KeypointsProcessor:
     
     def __init__(self):
         """Initialize the keypoints processor"""
+        warnings.filterwarnings("ignore", category=FutureWarning, message=".*torch.load.*weights_only.*")
         self.processed_sequences = 0
         self.session_start_time = None
         
