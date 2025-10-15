@@ -272,7 +272,7 @@ class WebSocketHandler:
                     prediction=response_data.get('prediction') if response_data else None,
                     processed_data=response_data
                 )
-                logger.info(f"Response to ws: {response}")
+                # logger.info(f"Response to ws: {response}")
                 await self._send_json_response(response)
                 
         except Exception as e:
