@@ -7,12 +7,14 @@ API microservice for sign2text backend.
 1. Python
 2. pip
 
-# Running the server using Docker
+# Running the server using Docker (recommended)
 
-- sudo docker build -t sign2text-backend .
-- sudo docker run --gpus all -p 8000:8000 --name sign2text-backend-container sign2text-backend
+``` bash
+sudo docker build -t sign2text-api .
+sudo docker run --gpus all -p 8000:8000 --name sign2text-api-container sign2text-api
+```
 
-# Running the app
+# Running the server (doesnt support openpose)
 
 Install NVCC and pytorch:
 
@@ -36,10 +38,5 @@ pip install -r requirements.txt
 fastapi dev main.py
 ```
 
-# Documentation
 
-```
-# After server started
-http://127.0.0.1:8000/docs
-http://127.0.0.1:8000/redoc
-```
+
