@@ -43,4 +43,6 @@ fastapi dev main.py
 # Openpose
 
 - Any issues related to Openpose should refer to the original authors at their repository [here](https://github.com/CMU-Perceptual-Computing-Lab/openpose). Do take note that the project is not actively maintained.
+- There is a specific model weight that should be downloaded from the original author's repo and placed in `model/how2sign/vn_model/glofe_vn_how2sign_0224.pt`. The file is too big to be uploaded.
+- Use `BODY_25` for openpose model, downloaded separately as well.
 
