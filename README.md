@@ -6,6 +6,8 @@ API microservice for sign2text backend.
 
 1. Python
 2. pip
+3. Docker
+4. Nvidia CUDA
 
 # Running the server using Docker (recommended)
 
@@ -38,5 +40,7 @@ pip install -r requirements.txt
 fastapi dev main.py
 ```
 
+# Openpose
 
+- Any issues related to Openpose should refer to the original authors at their repository [here](https://github.com/CMU-Perceptual-Computing-Lab/openpose). Do take note that the project is not actively maintained.
 
